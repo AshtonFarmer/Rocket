@@ -2,35 +2,336 @@
 
 import { CSSProperties, useEffect, useRef, useState } from "react";
 
-type SmokeParticle = {
-  x: number;
-  y: number;
+type Point = { x: number; y: number };
+type RawStroke = Array<[number, number]>;
+type RoutePoint = Point & { draw: boolean; travel: number };
+type SmokeParticle = Point & {
   radius: number;
   life: number;
   maxLife: number;
   driftX: number;
   driftY: number;
+  alpha: number;
 };
 
-type FlightMode = "cruise" | "writing";
-
 const FLIRTY_MESSAGES = [
-  "YOU LOOK GOOD FROM UP HERE ♥",
-  "ARE YOU ALWAYS THIS CUTE?",
-  "YOU MAKE MY HEART TAKE OFF",
-  "COME FLY AWAY WITH ME ♥",
-  "I’D CROSS THE SKY FOR YOU",
-  "YOU’RE MY FAVORITE VIEW ♥",
-  "I THINK THE SKY IS JEALOUS",
-  "YOU + ME ABOVE THE CLOUDS",
-  "HOW ARE YOU THIS PRETTY?",
-  "CAUTION: CRUSH ON BOARD",
-  "MEET ME IN THE CLOUDS ♥",
-  "YOU’VE GOT ME FLYING ♥",
+  "HEY CUTIE",
+  "YOU LOOK GOOD",
+  "MY FAVORITE VIEW",
+  "CRUSH ON BOARD",
+  "YOU MAKE ME SOAR",
+  "COME FLY WITH ME",
+  "LOOKING CUTE",
+  "YOU GOT ME FLYING",
+  "I LIKE YOUR FACE",
 ] as const;
+
+const STROKE_FONT: Record<string, RawStroke[]> = {
+  A: [
+    [[0, 1], [0.5, 0], [1, 1]],
+    [[0.2, 0.58], [0.8, 0.58]],
+  ],
+  B: [
+    [[0, 1], [0, 0], [0.55, 0], [0.88, 0.12], [0.88, 0.36], [0.58, 0.5], [0, 0.5]],
+    [[0.58, 0.5], [0.92, 0.63], [0.92, 0.86], [0.58, 1], [0, 1]],
+  ],
+  C: [[[1, 0.14], [0.78, 0.02], [0.28, 0.02], [0.04, 0.25], [0.04, 0.75], [0.28, 0.98], [0.78, 0.98], [1, 0.84]]],
+  D: [[[0, 1], [0, 0], [0.5, 0], [0.9, 0.2], [0.9, 0.8], [0.5, 1], [0, 1]]],
+  E: [
+    [[0.95, 0], [0, 0], [0, 1], [0.95, 1]],
+    [[0, 0.5], [0.73, 0.5]],
+  ],
+  F: [
+    [[0, 1], [0, 0], [0.95, 0]],
+    [[0, 0.5], [0.73, 0.5]],
+  ],
+  G: [[[1, 0.17], [0.78, 0.02], [0.28, 0.02], [0.04, 0.25], [0.04, 0.75], [0.28, 0.98], [0.8, 0.98], [1, 0.78], [1, 0.56], [0.58, 0.56]]],
+  H: [
+    [[0, 0], [0, 1]],
+    [[1, 0], [1, 1]],
+    [[0, 0.5], [1, 0.5]],
+  ],
+  I: [
+    [[0.08, 0], [0.92, 0]],
+    [[0.5, 0], [0.5, 1]],
+    [[0.08, 1], [0.92, 1]],
+  ],
+  J: [[[0.08, 0], [1, 0], [1, 0.72], [0.82, 0.96], [0.38, 0.98], [0.08, 0.78]]],
+  K: [
+    [[0, 0], [0, 1]],
+    [[0.95, 0], [0, 0.58], [1, 1]],
+  ],
+  L: [[[0, 0], [0, 1], [0.95, 1]]],
+  M: [[[0, 1], [0, 0], [0.5, 0.6], [1, 0], [1, 1]]],
+  N: [[[0, 1], [0, 0], [1, 1], [1, 0]]],
+  O: [[[0.5, 0], [0.18, 0.06], [0.02, 0.3], [0.02, 0.7], [0.18, 0.94], [0.5, 1], [0.82, 0.94], [0.98, 0.7], [0.98, 0.3], [0.82, 0.06], [0.5, 0]]],
+  P: [[[0, 1], [0, 0], [0.56, 0], [0.9, 0.14], [0.9, 0.38], [0.56, 0.52], [0, 0.52]]],
+  Q: [
+    [[0.5, 0], [0.18, 0.06], [0.02, 0.3], [0.02, 0.7], [0.18, 0.94], [0.5, 1], [0.82, 0.94], [0.98, 0.7], [0.98, 0.3], [0.82, 0.06], [0.5, 0]],
+    [[0.6, 0.66], [1, 1]],
+  ],
+  R: [
+    [[0, 1], [0, 0], [0.55, 0], [0.9, 0.14], [0.9, 0.38], [0.55, 0.52], [0, 0.52]],
+    [[0.5, 0.52], [1, 1]],
+  ],
+  S: [[[0.94, 0.14], [0.72, 0.02], [0.28, 0.02], [0.06, 0.2], [0.14, 0.42], [0.78, 0.58], [0.94, 0.78], [0.72, 0.98], [0.25, 0.98], [0.04, 0.84]]],
+  T: [
+    [[0, 0], [1, 0]],
+    [[0.5, 0], [0.5, 1]],
+  ],
+  U: [[[0, 0], [0, 0.7], [0.18, 0.94], [0.5, 1], [0.82, 0.94], [1, 0.7], [1, 0]]],
+  V: [[[0, 0], [0.5, 1], [1, 0]]],
+  W: [[[0, 0], [0.2, 1], [0.5, 0.48], [0.8, 1], [1, 0]]],
+  X: [
+    [[0, 0], [1, 1]],
+    [[1, 0], [0, 1]],
+  ],
+  Y: [
+    [[0, 0], [0.5, 0.5], [1, 0]],
+    [[0.5, 0.5], [0.5, 1]],
+  ],
+  Z: [[[0, 0], [1, 0], [0, 1], [1, 1]]],
+};
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const distance = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
+
+const lerpPoint = (a: Point, b: Point, amount: number): Point => ({
+  x: a.x + (b.x - a.x) * amount,
+  y: a.y + (b.y - a.y) * amount,
+});
+
+const normalize = (vector: Point): Point => {
+  const length = Math.hypot(vector.x, vector.y) || 1;
+  return { x: vector.x / length, y: vector.y / length };
+};
+
+const tangentBetween = (a: Point, b: Point) =>
+  normalize({ x: b.x - a.x, y: b.y - a.y });
+
+function roundedStroke(points: Point[]) {
+  if (points.length < 3) return points;
+  const result: Point[] = [points[0]];
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const corner = points[index];
+    const next = points[index + 1];
+    const entry = lerpPoint(previous, corner, 0.82);
+    const exit = lerpPoint(corner, next, 0.18);
+    result.push(entry);
+    for (let step = 1; step <= 6; step += 1) {
+      const amount = step / 6;
+      const inverse = 1 - amount;
+      result.push({
+        x: inverse * inverse * entry.x + 2 * inverse * amount * corner.x + amount * amount * exit.x,
+        y: inverse * inverse * entry.y + 2 * inverse * amount * corner.y + amount * amount * exit.y,
+      });
+    }
+  }
+
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+function cubicConnector(
+  start: Point,
+  startTangent: Point,
+  end: Point,
+  endTangent: Point,
+) {
+  const gap = distance(start, end);
+  const reach = clamp(gap * 0.38, 24, 130);
+  const controlA = {
+    x: start.x + startTangent.x * reach,
+    y: start.y + startTangent.y * reach,
+  };
+  const controlB = {
+    x: end.x - endTangent.x * reach,
+    y: end.y - endTangent.y * reach,
+  };
+  const steps = Math.max(10, Math.ceil(gap / 12));
+  const result: Point[] = [];
+
+  for (let index = 0; index <= steps; index += 1) {
+    const amount = index / steps;
+    const inverse = 1 - amount;
+    result.push({
+      x:
+        inverse ** 3 * start.x +
+        3 * inverse * inverse * amount * controlA.x +
+        3 * inverse * amount * amount * controlB.x +
+        amount ** 3 * end.x,
+      y:
+        inverse ** 3 * start.y +
+        3 * inverse * inverse * amount * controlA.y +
+        3 * inverse * amount * amount * controlB.y +
+        amount ** 3 * end.y,
+    });
+  }
+  return result;
+}
+
+function addRoutePoints(route: RoutePoint[], points: Point[], draw: boolean) {
+  points.forEach((point) => {
+    const previous = route.at(-1);
+    if (!previous) {
+      route.push({ ...point, draw, travel: 0 });
+      return;
+    }
+
+    const gap = distance(previous, point);
+    if (gap < 0.01) {
+      if (previous.draw !== draw) {
+        route.push({ ...point, draw, travel: previous.travel + 0.0001 });
+      }
+      return;
+    }
+
+    const drawsSegment = previous.draw && draw;
+    route.push({
+      ...point,
+      draw,
+      travel: previous.travel + gap * (drawsSegment ? 1 : 0.42),
+    });
+  });
+}
+
+function wrapMessage(message: string, maxCharacters: number) {
+  const words = message.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharacters || !current) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  });
+  if (current) lines.push(current);
+  return lines;
+}
+
+function lineUnits(line: string) {
+  return Array.from(line).reduce(
+    (total, character, index) =>
+      total + (character === " " ? 0.62 : 1) + (index ? 0.16 : 0),
+    0,
+  );
+}
+
+function buildMessageRoute(
+  message: string,
+  viewportWidth: number,
+  viewportHeight: number,
+  startTail: Point,
+  startTangent: Point,
+) {
+  const lines = wrapMessage(message, viewportWidth < 620 ? 12 : 18);
+  const widestLine = Math.max(...lines.map(lineUnits));
+  const scale = Math.min(
+    (viewportWidth * (viewportWidth < 620 ? 0.82 : 0.72)) / widestLine,
+    viewportWidth < 620 ? 34 : 62,
+    (viewportHeight * 0.34) / (lines.length * 1.62),
+  );
+  const lineGap = scale * 1.62;
+  const blockHeight = scale + (lines.length - 1) * lineGap;
+  const startY = clamp(
+    viewportHeight * 0.28 - blockHeight * 0.18,
+    viewportHeight * 0.18,
+    viewportHeight * 0.34,
+  );
+  const strokes: Array<{ points: Point[]; line: number }> = [];
+
+  lines.forEach((line, lineIndex) => {
+    const width = lineUnits(line) * scale;
+    let cursor = (viewportWidth - width) / 2;
+
+    Array.from(line).forEach((character) => {
+      if (character === " ") {
+        cursor += scale * 0.78;
+        return;
+      }
+      const glyph = STROKE_FONT[character] ?? STROKE_FONT.X;
+      glyph.forEach((stroke) => {
+        const transformed = stroke.map(([x, y]) => ({
+          x: cursor + x * scale,
+          y: startY + lineIndex * lineGap + y * scale,
+        }));
+        strokes.push({ points: roundedStroke(transformed), line: lineIndex });
+      });
+      cursor += scale * 1.16;
+    });
+  });
+
+  const route: RoutePoint[] = [];
+  let previousPoint = startTail;
+  let previousTangent = startTangent;
+  let previousLine = strokes[0]?.line ?? 0;
+
+  strokes.forEach((stroke) => {
+    const first = stroke.points[0];
+    const firstTangent = tangentBetween(stroke.points[0], stroke.points[1] ?? stroke.points[0]);
+
+    if (stroke.line !== previousLine) {
+      const exitRight = { x: viewportWidth + 90, y: previousPoint.y - scale * 0.35 };
+      const aboveRight = { x: viewportWidth + 110, y: -70 };
+      const aboveLeft = { x: -110, y: -70 };
+      const enterLeft = { x: -70, y: first.y - scale * 0.25 };
+      addRoutePoints(route, cubicConnector(previousPoint, previousTangent, exitRight, { x: 1, y: 0 }), false);
+      addRoutePoints(route, cubicConnector(exitRight, { x: 1, y: 0 }, aboveRight, { x: 0, y: -1 }), false);
+      addRoutePoints(route, cubicConnector(aboveRight, { x: -1, y: 0 }, aboveLeft, { x: -1, y: 0 }), false);
+      addRoutePoints(route, cubicConnector(aboveLeft, { x: 0, y: 1 }, enterLeft, { x: 1, y: 0 }), false);
+      addRoutePoints(route, cubicConnector(enterLeft, { x: 1, y: 0 }, first, firstTangent), false);
+    } else {
+      addRoutePoints(route, cubicConnector(previousPoint, previousTangent, first, firstTangent), false);
+    }
+
+    addRoutePoints(route, stroke.points, true);
+    previousPoint = stroke.points.at(-1) ?? first;
+    previousTangent = tangentBetween(
+      stroke.points.at(-2) ?? previousPoint,
+      previousPoint,
+    );
+    previousLine = stroke.line;
+  });
+
+  const departure = {
+    x: viewportWidth + 150,
+    y: clamp(previousPoint.y - viewportHeight * 0.08, 80, viewportHeight * 0.48),
+  };
+  addRoutePoints(
+    route,
+    cubicConnector(previousPoint, previousTangent, departure, { x: 1, y: -0.08 }),
+    false,
+  );
+
+  return route;
+}
+
+function pointOnRoute(route: RoutePoint[], travel: number) {
+  let low = 0;
+  let high = route.length - 1;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (route[middle].travel < travel) low = middle + 1;
+    else high = middle;
+  }
+
+  const upperIndex = clamp(low, 1, route.length - 1);
+  const lower = route[upperIndex - 1];
+  const upper = route[upperIndex];
+  const span = upper.travel - lower.travel || 1;
+  const amount = clamp((travel - lower.travel) / span, 0, 1);
+  const point = lerpPoint(lower, upper, amount);
+  const tangent = tangentBetween(lower, upper);
+  return { point, tangent, draw: lower.draw && upper.draw };
+}
 
 function Rocket() {
   return (
@@ -45,9 +346,7 @@ function Rocket() {
       <div className="rocket-shell">
         <span className="shell-highlight" />
         <span className="rocket-mark">R&ndash;02</span>
-        <span className="porthole">
-          <span className="porthole-shine" />
-        </span>
+        <span className="porthole"><span className="porthole-shine" /></span>
         <span className="nose-glint" />
       </div>
     </div>
@@ -69,35 +368,14 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rocketRef = useRef<HTMLDivElement>(null);
   const rollRef = useRef<HTMLDivElement>(null);
-  const revealRef = useRef<HTMLDivElement>(null);
-  const smokeRef = useRef(false);
-  const autoFlirtRef = useRef(true);
-  const flightModeRef = useRef<FlightMode>("cruise");
-  const writingStartedAt = useRef(0);
-  const nextAutoWriteAt = useRef(Number.POSITIVE_INFINITY);
-  const lastFlirtIndex = useRef(-1);
-  const manualRollStartedAt = useRef<number | null>(null);
-  const lastSmokeAt = useRef(0);
-  const timersRef = useRef<number[]>([]);
-  const [smokeOn, setSmokeOn] = useState(false);
-  const [autoFlirt, setAutoFlirt] = useState(true);
-  const [status, setStatus] = useState("AUTO FLIRT ARMED");
-  const [rollCount, setRollCount] = useState(0);
-  const [skyMessage, setSkyMessage] = useState("YOU’RE MY FAVORITE VIEW ♥");
-  const [messageShown, setMessageShown] = useState(false);
-  const [isWriting, setIsWriting] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState("A little surprise is on the way");
 
-  const stars = Array.from({ length: 38 }, (_, index) => {
-    const left = (index * 37 + 11) % 100;
-    const top = (index * 53 + 7) % 67;
-    const size = 1 + ((index * 7) % 3);
-    const delay = -((index * 0.31) % 4);
-    return { left, top, size, delay };
-  });
-
-  useEffect(() => {
-    smokeRef.current = smokeOn;
-  }, [smokeOn]);
+  const stars = Array.from({ length: 38 }, (_, index) => ({
+    left: (index * 37 + 11) % 100,
+    top: (index * 53 + 7) % 67,
+    size: 1 + ((index * 7) % 3),
+    delay: -((index * 0.31) % 4),
+  }));
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -109,19 +387,37 @@ export default function Home() {
     const context = canvas.getContext("2d");
     if (!context) return;
 
+    const sprite = document.createElement("canvas");
+    sprite.width = 64;
+    sprite.height = 64;
+    const spriteContext = sprite.getContext("2d");
+    if (spriteContext) {
+      const gradient = spriteContext.createRadialGradient(32, 32, 1, 32, 32, 31);
+      gradient.addColorStop(0, "rgba(255,255,255,0.98)");
+      gradient.addColorStop(0.28, "rgba(249,251,255,0.78)");
+      gradient.addColorStop(0.68, "rgba(231,239,252,0.28)");
+      gradient.addColorStop(1, "rgba(220,231,250,0)");
+      spriteContext.fillStyle = gradient;
+      spriteContext.fillRect(0, 0, 64, 64);
+    }
+
     const particles: SmokeParticle[] = [];
-    let frameId = 0;
     let width = 0;
     let height = 0;
+    let frameId = 0;
     let lastFrame = performance.now();
     let cruiseStartedAt = performance.now();
-    let cruisePhaseOffset = 0;
-    let resumeAt = 0;
-    nextAutoWriteAt.current = performance.now() + 4200;
+    let nextMessageAt = performance.now() + 4300;
+    let lastMessageIndex = -1;
+    let route: RoutePoint[] | null = null;
+    let routeStartedAt = 0;
+    let lastSmokePoint: Point | null = null;
+    let mode: "cruise" | "writing" = "cruise";
 
     const resize = () => {
       const bounds = scene.getBoundingClientRect();
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      const changed = Math.abs(width - bounds.width) > 3 || Math.abs(height - bounds.height) > 3;
       width = bounds.width;
       height = bounds.height;
       canvas.width = Math.round(width * pixelRatio);
@@ -129,31 +425,52 @@ export default function Home() {
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      if (changed && mode === "writing") {
+        mode = "cruise";
+        route = null;
+        cruiseStartedAt = performance.now();
+        nextMessageAt = performance.now() + 2200;
+        lastSmokePoint = null;
+      }
     };
 
-    const addSmoke = (x: number, y: number, heading: number, now: number) => {
-      const isSkywriting = flightModeRef.current === "writing";
-      const interval = isSkywriting ? 20 : 34;
-      if (!smokeRef.current || now - lastSmokeAt.current < interval) return;
-      lastSmokeAt.current = now;
-
-      const rocketLength = rocket.offsetWidth * 0.43;
-      const angle = (heading * Math.PI) / 180;
-      const tailX = x - Math.cos(angle) * rocketLength;
-      const tailY = y - Math.sin(angle) * rocketLength;
-
-      for (let index = 0; index < (isSkywriting ? 3 : 2); index += 1) {
-        const maxLife = (isSkywriting ? 2200 : 1700) + Math.random() * 900;
-        particles.push({
-          x: tailX + (Math.random() - 0.5) * 7,
-          y: tailY + (Math.random() - 0.5) * 7,
-          radius: 3.5 + Math.random() * 4,
+    const emitSmoke = (point: Point) => {
+      const makeParticle = (wisp: boolean): SmokeParticle => {
+        const maxLife = (wisp ? 18000 : 26000) + Math.random() * 5000;
+        return {
+          x: point.x + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
+          y: point.y + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
+          radius: (wisp ? 3 : 3.2) + Math.random() * (wisp ? 3 : 1.8),
           life: maxLife,
           maxLife,
-          driftX: -0.018 - Math.random() * 0.015,
-          driftY: -0.008 - Math.random() * 0.018,
-        });
+          driftX: (Math.random() - 0.45) * 0.0013,
+          driftY: -0.001 - Math.random() * 0.001,
+          alpha: wisp ? 0.25 : 0.52,
+        };
+      };
+      particles.push(makeParticle(false));
+      if (Math.random() > 0.63) particles.push(makeParticle(true));
+      if (particles.length > 1800) particles.splice(0, particles.length - 1800);
+    };
+
+    const extendSmokeTrail = (point: Point, draw: boolean) => {
+      if (!draw) {
+        lastSmokePoint = null;
+        return;
       }
+      if (!lastSmokePoint || distance(lastSmokePoint, point) > 36) {
+        lastSmokePoint = point;
+        emitSmoke(point);
+        return;
+      }
+
+      const gap = distance(lastSmokePoint, point);
+      const spacing = width < 620 ? 2.2 : 2.8;
+      const steps = Math.max(1, Math.ceil(gap / spacing));
+      for (let index = 1; index <= steps; index += 1) {
+        emitSmoke(lerpPoint(lastSmokePoint, point, index / steps));
+      }
+      lastSmokePoint = point;
     };
 
     const drawSmoke = (elapsed: number) => {
@@ -171,138 +488,102 @@ export default function Home() {
 
         particle.x += particle.driftX * elapsed;
         particle.y += particle.driftY * elapsed;
-        particle.radius += elapsed * 0.004;
-        const progress = particle.life / particle.maxLife;
-        const opacity = Math.sin(progress * Math.PI) * 0.42;
-        const gradient = context.createRadialGradient(
-          particle.x,
-          particle.y,
-          0,
-          particle.x,
-          particle.y,
-          particle.radius,
+        particle.radius += elapsed * 0.00045;
+        const age = 1 - particle.life / particle.maxLife;
+        const fadeIn = clamp(age / 0.035, 0, 1);
+        const fadeOut = clamp(particle.life / (particle.maxLife * 0.3), 0, 1);
+        context.globalAlpha = particle.alpha * fadeIn * fadeOut;
+        const diameter = particle.radius * 3.4;
+        context.drawImage(
+          sprite,
+          particle.x - diameter / 2,
+          particle.y - diameter / 2,
+          diameter,
+          diameter,
         );
-        gradient.addColorStop(0, `rgba(255,255,255,${opacity})`);
-        gradient.addColorStop(0.5, `rgba(236,242,255,${opacity * 0.72})`);
-        gradient.addColorStop(1, "rgba(222,232,255,0)");
-        context.fillStyle = gradient;
-        context.beginPath();
-        context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-        context.fill();
       }
       context.restore();
     };
 
+    const startWriting = (
+      now: number,
+      rocketX: number,
+      rocketY: number,
+      heading: number,
+    ) => {
+      let messageIndex = Math.floor(Math.random() * FLIRTY_MESSAGES.length);
+      if (messageIndex === lastMessageIndex) {
+        messageIndex = (messageIndex + 1) % FLIRTY_MESSAGES.length;
+      }
+      lastMessageIndex = messageIndex;
+      const message = FLIRTY_MESSAGES[messageIndex];
+      const radians = (heading * Math.PI) / 180;
+      const tailOffset = rocket.offsetWidth * 0.43;
+      const startTangent = { x: Math.cos(radians), y: Math.sin(radians) };
+      const startTail = {
+        x: rocketX - startTangent.x * tailOffset,
+        y: rocketY - startTangent.y * tailOffset,
+      };
+      route = buildMessageRoute(message, width, height, startTail, startTangent);
+      routeStartedAt = now;
+      mode = "writing";
+      nextMessageAt = Number.POSITIVE_INFINITY;
+      lastSmokePoint = null;
+      setCurrentMessage(message);
+    };
+
     const animate = (now: number) => {
-      const elapsed = clamp(now - lastFrame, 0, 40);
+      const elapsed = clamp(now - lastFrame, 0, 42);
       lastFrame = now;
-
-      if (
-        autoFlirtRef.current &&
-        flightModeRef.current === "cruise" &&
-        now >= nextAutoWriteAt.current
-      ) {
-        let nextIndex = Math.floor(Math.random() * FLIRTY_MESSAGES.length);
-        if (nextIndex === lastFlirtIndex.current) {
-          nextIndex = (nextIndex + 1) % FLIRTY_MESSAGES.length;
-        }
-        lastFlirtIndex.current = nextIndex;
-        timersRef.current.forEach((timer) => window.clearTimeout(timer));
-        timersRef.current = [];
-        smokeRef.current = true;
-        setSmokeOn(true);
-        setSkyMessage(FLIRTY_MESSAGES[nextIndex]);
-        setMessageShown(true);
-        setIsWriting(true);
-        setStatus("AUTO FLIRT");
-        if (revealRef.current) revealRef.current.style.width = "0%";
-        writingStartedAt.current = now + 350;
-        flightModeRef.current = "writing";
-        nextAutoWriteAt.current = Number.POSITIVE_INFINITY;
-      }
-
-      let x: number;
-      let y: number;
-      let dx: number;
-      let dy: number;
-      let heading: number;
-      let writingProgress = 0;
-
-      if (flightModeRef.current === "writing") {
-        writingProgress = clamp((now - writingStartedAt.current) / 9000, 0, 1);
-        const eased = 0.5 - Math.cos(writingProgress * Math.PI) / 2;
-        x = -120 + (width + 240) * eased;
-        y = height * (0.355 + 0.035 * Math.sin(writingProgress * Math.PI * 6));
-        dx = (width + 240) * Math.sin(writingProgress * Math.PI) + 1;
-        dy = height * 0.66 * Math.PI * Math.cos(writingProgress * Math.PI * 6);
-        heading = clamp((Math.atan2(dy, dx) * 180) / Math.PI, -18, 18);
-        if (revealRef.current) {
-          const revealProgress = clamp((eased - 0.04) / 0.88, 0, 1);
-          revealRef.current.style.width = `${revealProgress * 100}%`;
-        }
-
-        if (writingProgress >= 1) {
-          flightModeRef.current = "cruise";
-          setIsWriting(false);
-          setStatus("MESSAGE DELIVERED");
-          resumeAt = now + 620;
-          cruiseStartedAt = resumeAt;
-          cruisePhaseOffset = -Math.PI / 2;
-
-          timersRef.current.push(
-            window.setTimeout(() => {
-              setStatus(
-                autoFlirtRef.current
-                  ? "AUTO FLIRT ARMED"
-                  : smokeRef.current
-                    ? "SMOKE ARMED"
-                    : "FREE FLIGHT",
-              );
-            }, 2300),
-            window.setTimeout(() => {
-              setMessageShown(false);
-            }, 7200),
-          );
-          nextAutoWriteAt.current = autoFlirtRef.current
-            ? now + 10500
-            : Number.POSITIVE_INFINITY;
-        }
-      } else {
-        const time = (now - cruiseStartedAt) * 0.00019 + cruisePhaseOffset;
-        x = width * 0.5 + width * 0.42 * Math.sin(time);
-        y = height * 0.39 + height * 0.19 * Math.sin(time * 2 + 0.72);
-        dx = width * 0.42 * Math.cos(time);
-        dy = height * 0.38 * Math.cos(time * 2 + 0.72);
-        heading = (Math.atan2(dy, dx) * 180) / Math.PI;
-      }
-
-      const liningUp =
-        flightModeRef.current === "writing" && now < writingStartedAt.current;
-      if (now < resumeAt || liningUp) {
-        rocket.style.opacity = "0";
-      } else {
-        rocket.style.opacity = "1";
-      }
-
+      const tailOffset = rocket.offsetWidth * 0.43;
+      let rocketX = -130;
+      let rocketY = height * 0.3;
+      let heading = 0;
       let roll = 0;
-      const autoPhase = ((now - cruiseStartedAt) / 1000) % 11;
-      if (flightModeRef.current === "cruise" && autoPhase > 6.9 && autoPhase < 8.2) {
-        roll = ((autoPhase - 6.9) / 1.3) * 360;
-      }
 
-      if (manualRollStartedAt.current !== null) {
-        const rollProgress = (now - manualRollStartedAt.current) / 1000;
-        if (rollProgress < 1) {
-          roll = rollProgress * 360;
+      if (mode === "writing" && route && route.length > 1) {
+        const speed = width < 620 ? 90 : 118;
+        const travelled = (now - routeStartedAt) * (speed / 1000);
+        const routeLength = route.at(-1)?.travel ?? 0;
+
+        if (travelled >= routeLength) {
+          mode = "cruise";
+          route = null;
+          cruiseStartedAt = now;
+          nextMessageAt = now + 7200;
+          lastSmokePoint = null;
+          rocket.style.opacity = "0";
         } else {
-          manualRollStartedAt.current = null;
-          setStatus(smokeRef.current ? "SMOKE ARMED" : "FREE FLIGHT");
+          const routeState = pointOnRoute(route, travelled);
+          heading = (Math.atan2(routeState.tangent.y, routeState.tangent.x) * 180) / Math.PI;
+          rocketX = routeState.point.x + routeState.tangent.x * tailOffset;
+          rocketY = routeState.point.y + routeState.tangent.y * tailOffset;
+          extendSmokeTrail(routeState.point, routeState.draw);
+          rocket.style.opacity = "1";
+        }
+      } else {
+        const cycleDuration = 9800 + width * 1.35;
+        const phase = ((now - cruiseStartedAt) % cycleDuration) / cycleDuration;
+        const eased = phase * phase * (3 - 2 * phase);
+        rocketX = -130 + (width + 260) * eased;
+        rocketY = height * (0.31 + 0.055 * Math.sin(phase * Math.PI * 2 + 0.35));
+        const dx = (width + 260) * (6 * phase * (1 - phase)) + 1;
+        const dy = height * 0.11 * Math.PI * Math.cos(phase * Math.PI * 2 + 0.35);
+        heading = clamp((Math.atan2(dy, dx) * 180) / Math.PI, -12, 12);
+        if (phase > 0.54 && phase < 0.72) {
+          const rollProgress = (phase - 0.54) / 0.18;
+          roll = (0.5 - Math.cos(rollProgress * Math.PI) / 2) * 360;
+        }
+        lastSmokePoint = null;
+        rocket.style.opacity = "1";
+
+        if (now >= nextMessageAt) {
+          startWriting(now, rocketX, rocketY, heading);
         }
       }
 
-      rocket.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${heading}deg)`;
+      rocket.style.transform = `translate3d(${rocketX}px, ${rocketY}px, 0) rotate(${heading}deg)`;
       rollElement.style.transform = `perspective(420px) rotateX(${roll}deg)`;
-      if (now >= resumeAt && !liningUp) addSmoke(x, y, heading, now);
       drawSmoke(elapsed);
       frameId = requestAnimationFrame(animate);
     };
@@ -315,58 +596,12 @@ export default function Home() {
     return () => {
       cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
-      timersRef.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, []);
 
-  const triggerRoll = () => {
-    if (flightModeRef.current === "writing") return;
-    manualRollStartedAt.current = performance.now();
-    setRollCount((count) => count + 1);
-    setStatus("BARREL ROLL");
-  };
-
-  const toggleSmoke = () => {
-    if (flightModeRef.current === "writing") return;
-    const next = !smokeOn;
-    smokeRef.current = next;
-    setSmokeOn(next);
-    setStatus(next ? "SMOKE ARMED" : "FREE FLIGHT");
-  };
-
-  const toggleAutoFlirt = () => {
-    const next = !autoFlirt;
-    autoFlirtRef.current = next;
-    setAutoFlirt(next);
-    nextAutoWriteAt.current = next
-      ? performance.now() + 1600
-      : Number.POSITIVE_INFINITY;
-    setStatus(
-      next
-        ? "AUTO FLIRT ARMED"
-        : smokeRef.current
-          ? "SMOKE ARMED"
-          : "FREE FLIGHT",
-    );
-  };
-
-  const triggerNextFlirt = () => {
-    if (flightModeRef.current === "writing") return;
-    if (!autoFlirtRef.current) {
-      autoFlirtRef.current = true;
-      setAutoFlirt(true);
-    }
-    nextAutoWriteAt.current = performance.now() + 220;
-    setStatus("NEW FLIRT INBOUND");
-  };
-
   return (
     <main className="sky-page">
-      <section
-        className={`flight-scene ${messageShown ? "message-active" : ""} ${isWriting ? "is-writing" : ""}`}
-        ref={sceneRef}
-        aria-label="Interactive rocket flight"
-      >
+      <section className="flight-scene" ref={sceneRef} aria-label="A rocket writing flirty messages in the sky">
         <div className="sky-gradient" aria-hidden="true" />
         <div className="sun-glow" aria-hidden="true" />
         <div className="stars" aria-hidden="true">
@@ -391,98 +626,19 @@ export default function Home() {
         <MountainLine />
         <canvas className="smoke-canvas" ref={canvasRef} aria-hidden="true" />
 
-        <div className="sky-message-stage" aria-live="polite">
-          <div className="sky-message-reveal" ref={revealRef}>
-            <p className="sky-message-text">{skyMessage}</p>
-          </div>
-        </div>
-
         <div className="rocket-motion" ref={rocketRef}>
-          <div className="rocket-roll" ref={rollRef}>
-            <Rocket />
-          </div>
+          <div className="rocket-roll" ref={rollRef}><Rocket /></div>
         </div>
 
         <header className="flight-header">
-          <a className="brand" href="#top" aria-label="Love, launched home">
+          <div className="brand" aria-label="Love, launched">
             <span className="brand-orbit" aria-hidden="true"><i /></span>
             <span>LOVE, LAUNCHED.</span>
-          </a>
-          <div className="flight-status" role="status" aria-live="polite">
-            <span className="status-light" />
-            {status}
           </div>
-          <button className="roll-button top-roll" type="button" onClick={triggerRoll} disabled={isWriting}>
-            <span aria-hidden="true">↻</span>
-            BARREL ROLL
-          </button>
+          <p className="for-you"><span aria-hidden="true">♥</span> JUST FOR YOU</p>
         </header>
 
-        <div className="hero-copy" id="top">
-          <p className="eyebrow">A RANDOM FLIRT. A VERY BIG SKY.</p>
-          <h1>
-            Some feelings
-            <em>need more airspace.</em>
-          </h1>
-          <p className="hero-note">Let the rocket do the flirting.</p>
-        </div>
-
-        <div className="flight-controls" aria-label="Flight controls">
-          <button
-            className={`auto-toggle ${autoFlirt ? "is-on" : ""}`}
-            type="button"
-            role="switch"
-            aria-checked={autoFlirt}
-            onClick={toggleAutoFlirt}
-          >
-            <span className="step-number">01</span>
-            <span className="step-copy">
-              <small>FLIGHT MODE</small>
-              <strong>AUTO FLIRT {autoFlirt ? "ON" : "OFF"}</strong>
-            </span>
-            <span className="auto-spark" aria-hidden="true"><i>✦</i><i>✦</i></span>
-          </button>
-
-          <button
-            className={`smoke-toggle ${smokeOn ? "is-on" : ""}`}
-            type="button"
-            role="switch"
-            aria-checked={smokeOn}
-            onClick={toggleSmoke}
-            disabled={isWriting}
-          >
-            <span className="step-number">02</span>
-            <span className="step-copy">
-              <small>SKYWRITER</small>
-              <strong>SMOKE {smokeOn ? "ON" : "OFF"}</strong>
-            </span>
-            <span className="switch-track" aria-hidden="true"><i /></span>
-          </button>
-
-          <button className="roll-button mobile-roll" type="button" onClick={triggerRoll} disabled={isWriting}>
-            <span aria-hidden="true">↻</span>
-            ROLL IT{rollCount > 0 ? ` · ${rollCount}` : ""}
-          </button>
-
-          <button
-            className="next-flirt-button"
-            type="button"
-            onClick={triggerNextFlirt}
-            disabled={isWriting}
-          >
-            <span className="step-number">03</span>
-            <span className="step-copy">
-              <small>SKY MESSAGE</small>
-              <strong>{isWriting ? "WRITING…" : "NEXT FLIRT"}</strong>
-            </span>
-            <i aria-hidden="true">↗</i>
-          </button>
-        </div>
-
-        <div className="scroll-note" aria-hidden="true">
-          <span />
-          FLIGHT 01 / GOLDEN HOUR
-        </div>
+        <p className="sr-only" aria-live="polite">The rocket is writing: {currentMessage}</p>
         <div className="grain" aria-hidden="true" />
       </section>
     </main>
