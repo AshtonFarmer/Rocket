@@ -1,17 +1,20 @@
 # Rocket Skywriter
 
-A cinematic, interactive rocket flight built for the browser. The rocket loops through a golden-hour sky, performs barrel rolls, turns on its smoke, and automatically writes a rotating selection of sweet, flirty messages.
+A cinematic, hands-off rocket film built for the browser. A small rocket crosses a golden-hour sky, performs gentle barrel rolls, and automatically writes sweet, flirty messages using smoke emitted directly from its tail.
 
-**[Launch Rocket Skywriter](https://rocket-skywriter.ashton20-bama.chatgpt.site)**
+**[Watch Rocket Skywriter](https://rocket-skywriter.ashton20-bama.chatgpt.site)**
+
+## How it works
+
+The lettering uses a custom single-line vector alphabet. The rocket follows every letter stroke, and the smoke particles originate at the exact tail position along that route. Smoke turns off while the rocket travels between separate strokes, so no text overlay or fake reveal is involved.
 
 ## Features
 
-- Automatic random flirty skywriting, with no message box needed
-- Smooth figure-eight flight with automatic and button-triggered barrel rolls
-- Detailed CSS-built rocket with a glowing animated engine
-- Canvas-rendered smoke particles and smoky lettering
-- Auto Flirt, Smoke, Next Flirt, and Barrel Roll controls
-- Responsive layout for phones and desktops
+- Passive viewing experience with no controls or message box
+- Random rotating flirty messages
+- Tail-emitted particle smoke that physically traces every letter
+- Smooth connector routes, gentle cruising, and automatic barrel rolls
+- Responsive composition for phones and desktops
 
 ## Run locally
 
