@@ -412,7 +412,10 @@ export default function Home() {
     let route: RoutePoint[] | null = null;
     let routeStartedAt = 0;
     let lastSmokePoint: Point | null = null;
+    let smokeFadeStartedAt: number | null = null;
     let mode: "cruise" | "writing" = "cruise";
+    const smokeHoldDuration = 1000;
+    const smokeFadeDuration = 2600;
 
     const resize = () => {
       const bounds = scene.getBoundingClientRect();
@@ -426,26 +429,28 @@ export default function Home() {
       canvas.style.height = `${height}px`;
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       if (changed && mode === "writing") {
+        const now = performance.now();
         mode = "cruise";
         route = null;
-        cruiseStartedAt = performance.now();
-        nextMessageAt = performance.now() + 2200;
+        cruiseStartedAt = now;
+        smokeFadeStartedAt = now;
+        nextMessageAt = now + smokeFadeDuration + 800;
         lastSmokePoint = null;
       }
     };
 
     const emitSmoke = (point: Point) => {
       const makeParticle = (wisp: boolean): SmokeParticle => {
-        const maxLife = (wisp ? 18000 : 26000) + Math.random() * 5000;
+        const maxLife = 60000 + Math.random() * 8000;
         return {
           x: point.x + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
           y: point.y + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
           radius: (wisp ? 3 : 3.2) + Math.random() * (wisp ? 3 : 1.8),
           life: maxLife,
           maxLife,
-          driftX: (Math.random() - 0.45) * 0.0013,
-          driftY: -0.001 - Math.random() * 0.001,
-          alpha: wisp ? 0.25 : 0.52,
+          driftX: (Math.random() - 0.45) * 0.00045,
+          driftY: -0.00025 - Math.random() * 0.00035,
+          alpha: wisp ? 0.18 : 0.46,
         };
       };
       particles.push(makeParticle(false));
@@ -473,8 +478,22 @@ export default function Home() {
       lastSmokePoint = point;
     };
 
-    const drawSmoke = (elapsed: number) => {
+    const drawSmoke = (elapsed: number, now: number) => {
       context.clearRect(0, 0, width, height);
+      let layerOpacity = 1;
+      let fadeProgress = 0;
+      if (smokeFadeStartedAt !== null && now >= smokeFadeStartedAt) {
+        fadeProgress = clamp(
+          (now - smokeFadeStartedAt) / smokeFadeDuration,
+          0,
+          1,
+        );
+        layerOpacity = 1 - fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
+        if (fadeProgress >= 1) {
+          particles.length = 0;
+          smokeFadeStartedAt = null;
+        }
+      }
       context.save();
       context.globalCompositeOperation = "screen";
 
@@ -488,12 +507,11 @@ export default function Home() {
 
         particle.x += particle.driftX * elapsed;
         particle.y += particle.driftY * elapsed;
-        particle.radius += elapsed * 0.00045;
+        particle.radius += elapsed * 0.00018;
         const age = 1 - particle.life / particle.maxLife;
         const fadeIn = clamp(age / 0.035, 0, 1);
-        const fadeOut = clamp(particle.life / (particle.maxLife * 0.3), 0, 1);
-        context.globalAlpha = particle.alpha * fadeIn * fadeOut;
-        const diameter = particle.radius * 3.4;
+        context.globalAlpha = particle.alpha * fadeIn * layerOpacity;
+        const diameter = particle.radius * 3.4 * (1 + fadeProgress * 0.55);
         context.drawImage(
           sprite,
           particle.x - diameter / 2,
@@ -528,6 +546,8 @@ export default function Home() {
       routeStartedAt = now;
       mode = "writing";
       nextMessageAt = Number.POSITIVE_INFINITY;
+      particles.length = 0;
+      smokeFadeStartedAt = null;
       lastSmokePoint = null;
       setCurrentMessage(message);
     };
@@ -550,7 +570,9 @@ export default function Home() {
           mode = "cruise";
           route = null;
           cruiseStartedAt = now;
-          nextMessageAt = now + 7200;
+          smokeFadeStartedAt = now + smokeHoldDuration;
+          nextMessageAt =
+            now + smokeHoldDuration + smokeFadeDuration + 1000;
           lastSmokePoint = null;
           rocket.style.opacity = "0";
         } else {
@@ -584,7 +606,7 @@ export default function Home() {
 
       rocket.style.transform = `translate3d(${rocketX}px, ${rocketY}px, 0) rotate(${heading}deg)`;
       rollElement.style.transform = `perspective(420px) rotateX(${roll}deg)`;
-      drawSmoke(elapsed);
+      drawSmoke(elapsed, now);
       frameId = requestAnimationFrame(animate);
     };
 
