@@ -1,0 +1,8 @@
+node_modules/
+.next/
+dist/
+.sites-runtime/
+.wrangler/
+.env*
+.DS_Store
+npm-debug.log*
