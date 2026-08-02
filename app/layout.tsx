@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Love, Launched — Rocket Skywriter",
-  description: "Send a sweet message across the sky with a barrel-rolling rocket.",
+  description: "Watch a barrel-rolling rocket write sweet messages across the sky with its smoke trail.",
   other: {
     "codex-preview": "development",
   },
