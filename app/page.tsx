@@ -16,6 +16,9 @@ type SmokeParticle = Point & {
   kind: "message" | "stunt" | "finale";
 };
 
+const SCRIPT_LETTER_GAP = 0.065;
+const SCRIPT_WORD_GAP = 0.58;
+
 const FLIRTY_MESSAGES = [
   "HEY CUTIE",
   "MY FAVORITE VIEW",
@@ -202,8 +205,9 @@ function lineUnits(line: string) {
     (total, character, index) =>
       total +
       (character === " "
-        ? 0.64
-        : (SCRIPT_FONT[character] ?? SCRIPT_FONT.X).width + 0.025) +
+        ? SCRIPT_WORD_GAP
+        : (SCRIPT_FONT[character] ?? SCRIPT_FONT.X).width +
+          SCRIPT_LETTER_GAP) +
       (index ? 0 : 0.1),
     0,
   );
@@ -216,26 +220,30 @@ function buildMessageRoute(
   startTail: Point,
   startTangent: Point,
 ) {
-  const lines = wrapMessage(message, viewportWidth < 620 ? 12 : 18);
+  const isPhone = viewportWidth < 620;
+  const lines = wrapMessage(message, isPhone ? 11 : 18);
   const widestLine = Math.max(...lines.map(lineUnits));
+  const verticalStretch = isPhone ? 1.38 : 1.18;
   const scale = Math.min(
-    (viewportWidth * (viewportWidth < 620 ? 0.85 : 0.75)) / widestLine,
-    viewportWidth < 620 ? 43 : 72,
-    (viewportHeight * 0.31) / (lines.length * 1.48),
+    (viewportWidth * (isPhone ? 0.9 : 0.78)) / widestLine,
+    isPhone ? 59 : 76,
+    (viewportHeight * 0.39) /
+      (verticalStretch * (1.12 + (lines.length - 1) * 1.5)),
   );
-  const lineGap = scale * 1.48;
-  const blockHeight = scale * 1.12 + (lines.length - 1) * lineGap;
+  const letterHeight = scale * verticalStretch;
+  const lineGap = letterHeight * 1.5;
+  const blockHeight = letterHeight * 1.12 + (lines.length - 1) * lineGap;
   const startY = clamp(
-    viewportHeight * 0.27 - blockHeight * 0.16,
-    viewportHeight * 0.17,
-    viewportHeight * 0.31,
+    viewportHeight * 0.23 - blockHeight * 0.12,
+    viewportHeight * 0.145,
+    viewportHeight * 0.28,
   );
   const strokes: Array<{ points: Point[]; line: number; word: number }> = [];
 
   lines.forEach((line, lineIndex) => {
     const width = lineUnits(line) * scale;
     let cursor = (viewportWidth - width) / 2;
-    const baseline = startY + lineIndex * lineGap + scale * 0.82;
+    const baseline = startY + lineIndex * lineGap + letterHeight * 0.82;
     const words = line.split(" ");
 
     words.forEach((word, wordIndex) => {
@@ -250,8 +258,8 @@ function buildMessageRoute(
           x:
             cursor +
             x * glyph.width * scale +
-            (0.82 - y) * scale * 0.13,
-          y: startY + lineIndex * lineGap + y * scale,
+            (0.82 - y) * scale * 0.1,
+          y: startY + lineIndex * lineGap + y * letterHeight,
         }));
         const smoothed = smoothScriptStroke(transformed);
         const previous = wordPoints.at(-1) ?? transformed[0];
@@ -267,7 +275,7 @@ function buildMessageRoute(
           ...cubicConnector(previous, previousTangent, smoothed[0], nextTangent).slice(1),
           ...smoothed.slice(1),
         );
-        cursor += (glyph.width + 0.025) * scale;
+        cursor += (glyph.width + SCRIPT_LETTER_GAP) * scale;
       });
 
       wordPoints.push({
@@ -279,7 +287,7 @@ function buildMessageRoute(
         line: lineIndex,
         word: wordIndex,
       });
-      if (wordIndex < words.length - 1) cursor += scale * 0.64;
+      if (wordIndex < words.length - 1) cursor += scale * SCRIPT_WORD_GAP;
     });
   });
 
@@ -626,19 +634,34 @@ export default function Home() {
       const makeParticle = (wisp: boolean): SmokeParticle => {
         const isStunt = kind === "stunt";
         const isFinale = kind === "finale";
+        const isMessage = kind === "message";
         const maxLife = isStunt
           ? 1700 + Math.random() * 850
           : 60000 + Math.random() * 8000;
+        const jitter = isMessage
+          ? wisp
+            ? 2.2
+            : 0.9
+          : wisp
+            ? 6
+            : 2.5;
+        const radius = isMessage
+          ? (wisp ? 1.55 : 1.45) + Math.random() * (wisp ? 0.75 : 0.55)
+          : (wisp ? 3.1 : 3.7) +
+            Math.random() * (wisp ? 2.8 : isFinale ? 2.3 : 1.9);
         return {
-          x: point.x + (Math.random() - 0.5) * (wisp ? 6 : 2.5),
-          y: point.y + (Math.random() - 0.5) * (wisp ? 6 : 2.5),
-          radius:
-            (wisp ? 3.1 : 3.7) +
-            Math.random() * (wisp ? 2.8 : isFinale ? 2.3 : 1.9),
+          x: point.x + (Math.random() - 0.5) * jitter,
+          y: point.y + (Math.random() - 0.5) * jitter,
+          radius,
           life: maxLife,
           maxLife,
-          driftX: (Math.random() - 0.45) * (isStunt ? 0.0008 : 0.00042),
-          driftY: -0.00022 - Math.random() * (isStunt ? 0.0005 : 0.00032),
+          driftX:
+            (Math.random() - 0.45) *
+            (isStunt ? 0.0008 : isMessage ? 0.0002 : 0.00042),
+          driftY:
+            -0.00012 -
+            Math.random() *
+              (isStunt ? 0.0005 : isMessage ? 0.00016 : 0.00032),
           alpha: isStunt
             ? wisp
               ? 0.13
@@ -648,14 +671,17 @@ export default function Home() {
                 ? 0.26
                 : 0.64
               : wisp
-                ? 0.24
-                : 0.62,
+                ? 0.12
+                : 0.78,
           kind,
         };
       };
 
       particles.push(makeParticle(false));
-      if (Math.random() > (kind === "stunt" ? 0.72 : 0.64)) {
+      if (
+        Math.random() >
+        (kind === "stunt" ? 0.72 : kind === "message" ? 0.88 : 0.64)
+      ) {
         particles.push(makeParticle(true));
       }
       if (particles.length > 5200) {
@@ -716,7 +742,13 @@ export default function Home() {
 
         particle.x += particle.driftX * elapsed;
         particle.y += particle.driftY * elapsed;
-        particle.radius += elapsed * (particle.kind === "stunt" ? 0.00042 : 0.00017);
+        particle.radius +=
+          elapsed *
+          (particle.kind === "stunt"
+            ? 0.00042
+            : particle.kind === "message"
+              ? 0.000055
+              : 0.00017);
         const age = 1 - particle.life / particle.maxLife;
         const fadeIn = clamp(age / (particle.kind === "stunt" ? 0.035 : 0.009), 0, 1);
         const naturalFade =
@@ -725,7 +757,10 @@ export default function Home() {
             : 1;
         const particleOpacity =
           particle.alpha * fadeIn * naturalFade * layerOpacity;
-        const diameter = particle.radius * 3.9 * (1 + fadeProgress * 0.48);
+        const diameter =
+          particle.radius *
+          (particle.kind === "message" ? 3.35 : 3.9) *
+          (1 + fadeProgress * 0.48);
         if (particle.kind === "finale" && finaleGlow > 0.01) {
           const glowDiameter = diameter * (2.1 + finaleGlow * 1.2);
           context.globalAlpha = particleOpacity * finaleGlow * 0.26;
@@ -852,8 +887,8 @@ export default function Home() {
         const speed =
           mode === "writing"
             ? width < 620
-              ? 91
-              : 120
+              ? 104
+              : 128
             : mode === "intro"
               ? width < 620
                 ? 145
@@ -899,8 +934,6 @@ export default function Home() {
           const targetBank = clamp(headingChange * 3.1, -42, 42);
           bank += (targetBank - bank) * clamp(elapsed * 0.009, 0, 1);
           previousHeading = heading;
-          rocketX = routeState.point.x + routeState.tangent.x * tailOffset;
-          rocketY = routeState.point.y + routeState.tangent.y * tailOffset;
           visible = true;
 
           if (mode === "intro") {
@@ -912,13 +945,19 @@ export default function Home() {
             roll = bank + rollProgress * 360;
           } else if (mode === "writing") {
             roll = bank;
-            rocketScale = 0.91;
+            rocketScale = width < 620 ? 0.78 : 0.86;
             cameraZoom = 1.016;
           } else {
             roll = bank;
             rocketScale = 1.08;
             cameraZoom = 1.038;
           }
+
+          const scaledTailOffset = tailOffset * rocketScale;
+          rocketX =
+            routeState.point.x + routeState.tangent.x * scaledTailOffset;
+          rocketY =
+            routeState.point.y + routeState.tangent.y * scaledTailOffset;
         }
       } else if (mode === "flythrough") {
         const duration = 2050;
