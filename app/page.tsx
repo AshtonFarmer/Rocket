@@ -12,18 +12,26 @@ type SmokeParticle = Point & {
   driftX: number;
   driftY: number;
   alpha: number;
+  kind: "message" | "stunt" | "finale";
 };
 
 const FLIRTY_MESSAGES = [
   "HEY CUTIE",
-  "YOU LOOK GOOD",
   "MY FAVORITE VIEW",
-  "CRUSH ON BOARD",
+  "HOW ARE YOU THIS CUTE",
+  "YOU MAKE ME BLUSH",
+  "I WOULD ORBIT YOU",
+  "STUCK ON YOU",
+  "YOU ARE MY TYPE",
+  "CUTEST IN THE GALAXY",
   "YOU MAKE ME SOAR",
   "COME FLY WITH ME",
   "LOOKING CUTE",
   "YOU GOT ME FLYING",
   "I LIKE YOUR FACE",
+  "CRUSH ON BOARD",
+  "YOU LOOK SO GOOD",
+  "KINDA CRAZY ABOUT YOU",
 ] as const;
 
 const STROKE_FONT: Record<string, RawStroke[]> = {
@@ -314,6 +322,89 @@ function buildMessageRoute(
   return route;
 }
 
+function shuffle<T>(values: T[]) {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function makeHeartPoints(center: Point, width: number) {
+  const raw: Point[] = [];
+  const steps = 150;
+
+  for (let index = 0; index <= steps; index += 1) {
+    const angle = (index / steps) * Math.PI * 2;
+    raw.push({
+      x: 16 * Math.sin(angle) ** 3,
+      y:
+        13 * Math.cos(angle) -
+        5 * Math.cos(angle * 2) -
+        2 * Math.cos(angle * 3) -
+        Math.cos(angle * 4),
+    });
+  }
+
+  const minX = Math.min(...raw.map((point) => point.x));
+  const maxX = Math.max(...raw.map((point) => point.x));
+  const minY = Math.min(...raw.map((point) => point.y));
+  const maxY = Math.max(...raw.map((point) => point.y));
+  const scale = width / (maxX - minX);
+  const middleX = (minX + maxX) / 2;
+  const middleY = (minY + maxY) / 2;
+
+  return raw.map((point) => ({
+    x: center.x + (point.x - middleX) * scale,
+    y: center.y - (point.y - middleY) * scale,
+  }));
+}
+
+function buildHeartRoute(
+  viewportWidth: number,
+  viewportHeight: number,
+  kind: "intro" | "finale",
+) {
+  const heartWidth =
+    kind === "intro"
+      ? Math.min(viewportWidth * 0.28, viewportHeight * 0.26, 210)
+      : Math.min(viewportWidth * 0.72, viewportHeight * 0.56, 520);
+  const center = {
+    x: viewportWidth * 0.5,
+    y: viewportHeight * (kind === "intro" ? 0.38 : 0.42),
+  };
+  const heart = makeHeartPoints(center, heartWidth);
+  const start = {
+    x: -150,
+    y: viewportHeight * (kind === "intro" ? 0.31 : 0.46),
+  };
+  const startTangent = { x: 1, y: kind === "intro" ? -0.08 : 0 };
+  const firstTangent = tangentBetween(heart[0], heart[1]);
+  const route: RoutePoint[] = [];
+
+  addRoutePoints(route, [start], false);
+  addRoutePoints(
+    route,
+    cubicConnector(start, startTangent, heart[0], firstTangent),
+    false,
+  );
+  addRoutePoints(route, heart, true);
+
+  if (kind === "intro") {
+    const last = heart.at(-1) ?? heart[0];
+    const lastTangent = tangentBetween(heart.at(-2) ?? last, last);
+    const departure = { x: viewportWidth + 165, y: viewportHeight * 0.24 };
+    addRoutePoints(
+      route,
+      cubicConnector(last, lastTangent, departure, { x: 1, y: -0.12 }),
+      false,
+    );
+  }
+
+  return { route, center, heartStart: heart[0], heartWidth };
+}
+
 function pointOnRoute(route: RoutePoint[], travel: number) {
   let low = 0;
   let high = route.length - 1;
@@ -336,19 +427,43 @@ function pointOnRoute(route: RoutePoint[], travel: number) {
 function Rocket() {
   return (
     <div className="rocket" aria-hidden="true">
+      <div className="engine-glow" />
       <div className="rocket-exhaust">
         <span className="flame flame-outer" />
+        <span className="flame flame-middle" />
         <span className="flame flame-inner" />
+        <span className="exhaust-spark spark-a" />
+        <span className="exhaust-spark spark-b" />
       </div>
-      <div className="tail-ring" />
-      <div className="fin fin-top" />
-      <div className="fin fin-bottom" />
+      <div className="engine-nozzle">
+        <span className="nozzle-ridge ridge-a" />
+        <span className="nozzle-ridge ridge-b" />
+      </div>
+      <div className="fin fin-top"><span /></div>
+      <div className="fin fin-bottom"><span /></div>
+      <div className="winglet winglet-top" />
+      <div className="winglet winglet-bottom" />
       <div className="rocket-shell">
+        <span className="shell-belly" />
         <span className="shell-highlight" />
-        <span className="rocket-mark">R&ndash;02</span>
-        <span className="porthole"><span className="porthole-shine" /></span>
-        <span className="nose-glint" />
+        <span className="side-stripe" />
+        <span className="panel-seam seam-a" />
+        <span className="panel-seam seam-b" />
+        <span className="rocket-mark">R&ndash;02 <i>LOVECRAFT</i></span>
+        <span className="rivet rivet-a" />
+        <span className="rivet rivet-b" />
+        <span className="rivet rivet-c" />
+        <span className="rivet rivet-d" />
+        <span className="porthole-ring">
+          <span className="porthole">
+            <span className="porthole-nebula" />
+            <span className="porthole-shine" />
+            <span className="porthole-star" />
+          </span>
+        </span>
+        <span className="service-panel"><i /><i /><i /></span>
       </div>
+      <div className="nose-cone"><span className="nose-glint" /></div>
     </div>
   );
 }
@@ -401,81 +516,123 @@ export default function Home() {
       spriteContext.fillRect(0, 0, 64, 64);
     }
 
+    type Mode =
+      | "intro"
+      | "writing"
+      | "clearing"
+      | "finale"
+      | "flythrough"
+      | "pause";
+    type NextAction = "message" | "finale" | "restart";
+
     const particles: SmokeParticle[] = [];
     let width = 0;
     let height = 0;
     let frameId = 0;
     let lastFrame = performance.now();
-    let cruiseStartedAt = performance.now();
-    let nextMessageAt = performance.now() + 4300;
-    let lastMessageIndex = -1;
     let route: RoutePoint[] | null = null;
     let routeStartedAt = 0;
-    let lastSmokePoint: Point | null = null;
+    let lastRouteTravel = 0;
     let smokeFadeStartedAt: number | null = null;
-    let mode: "cruise" | "writing" = "cruise";
-    const smokeHoldDuration = 1000;
-    const smokeFadeDuration = 2600;
+    let mode: Mode = "intro";
+    let nextAction: NextAction = "message";
+    let nextActionAt = Number.POSITIVE_INFINITY;
+    let messageBag: number[] = [];
+    let lastMessageIndex = -1;
+    let showMessageCount = 0;
+    let messagesThisShow = 3;
+    let bank = 0;
+    let previousHeading = 0;
+    let finaleCenter: Point = { x: 0, y: 0 };
+    let finaleStart: Point = { x: 0, y: 0 };
+    let flythroughStartedAt = 0;
+    const smokeHoldDuration = 950;
+    const smokeFadeDuration = 2550;
+    const clearSkyDuration = 900;
+    const finaleHoldDuration = 1650;
 
-    const resize = () => {
-      const bounds = scene.getBoundingClientRect();
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      const changed = Math.abs(width - bounds.width) > 3 || Math.abs(height - bounds.height) > 3;
-      width = bounds.width;
-      height = bounds.height;
-      canvas.width = Math.round(width * pixelRatio);
-      canvas.height = Math.round(height * pixelRatio);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      if (changed && mode === "writing") {
-        const now = performance.now();
-        mode = "cruise";
-        route = null;
-        cruiseStartedAt = now;
-        smokeFadeStartedAt = now;
-        nextMessageAt = now + smokeFadeDuration + 800;
-        lastSmokePoint = null;
+    const smoothstep = (value: number) => {
+      const amount = clamp(value, 0, 1);
+      return amount * amount * (3 - 2 * amount);
+    };
+
+    const refillMessageBag = () => {
+      messageBag = shuffle(
+        Array.from({ length: FLIRTY_MESSAGES.length }, (_, index) => index),
+      );
+      if (messageBag[0] === lastMessageIndex && messageBag.length > 1) {
+        [messageBag[0], messageBag[1]] = [messageBag[1], messageBag[0]];
       }
     };
 
-    const emitSmoke = (point: Point) => {
+    const takeMessage = () => {
+      if (!messageBag.length) refillMessageBag();
+      const index = messageBag.shift() ?? 0;
+      lastMessageIndex = index;
+      return FLIRTY_MESSAGES[index];
+    };
+
+    const emitSmoke = (
+      point: Point,
+      kind: SmokeParticle["kind"],
+    ) => {
       const makeParticle = (wisp: boolean): SmokeParticle => {
-        const maxLife = 60000 + Math.random() * 8000;
+        const isStunt = kind === "stunt";
+        const isFinale = kind === "finale";
+        const maxLife = isStunt
+          ? 1700 + Math.random() * 850
+          : 60000 + Math.random() * 8000;
         return {
-          x: point.x + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
-          y: point.y + (Math.random() - 0.5) * (wisp ? 6 : 2.6),
-          radius: (wisp ? 3 : 3.2) + Math.random() * (wisp ? 3 : 1.8),
+          x: point.x + (Math.random() - 0.5) * (wisp ? 6 : 2.5),
+          y: point.y + (Math.random() - 0.5) * (wisp ? 6 : 2.5),
+          radius:
+            (wisp ? 3.1 : 3.7) +
+            Math.random() * (wisp ? 2.8 : isFinale ? 2.3 : 1.9),
           life: maxLife,
           maxLife,
-          driftX: (Math.random() - 0.45) * 0.00045,
-          driftY: -0.00025 - Math.random() * 0.00035,
-          alpha: wisp ? 0.18 : 0.46,
+          driftX: (Math.random() - 0.45) * (isStunt ? 0.0008 : 0.00042),
+          driftY: -0.00022 - Math.random() * (isStunt ? 0.0005 : 0.00032),
+          alpha: isStunt
+            ? wisp
+              ? 0.13
+              : 0.34
+            : isFinale
+              ? wisp
+                ? 0.26
+                : 0.64
+              : wisp
+                ? 0.24
+                : 0.62,
+          kind,
         };
       };
+
       particles.push(makeParticle(false));
-      if (Math.random() > 0.63) particles.push(makeParticle(true));
-      if (particles.length > 1800) particles.splice(0, particles.length - 1800);
+      if (Math.random() > (kind === "stunt" ? 0.72 : 0.64)) {
+        particles.push(makeParticle(true));
+      }
+      if (particles.length > 5200) {
+        particles.splice(0, particles.length - 5200);
+      }
     };
 
-    const extendSmokeTrail = (point: Point, draw: boolean) => {
-      if (!draw) {
-        lastSmokePoint = null;
-        return;
-      }
-      if (!lastSmokePoint || distance(lastSmokePoint, point) > 36) {
-        lastSmokePoint = point;
-        emitSmoke(point);
-        return;
-      }
-
-      const gap = distance(lastSmokePoint, point);
-      const spacing = width < 620 ? 2.2 : 2.8;
+    const traceRouteSmoke = (
+      activeRoute: RoutePoint[],
+      fromTravel: number,
+      toTravel: number,
+      kind: SmokeParticle["kind"],
+    ) => {
+      const spacing =
+        kind === "stunt" ? 3.4 : width < 620 ? 2.15 : kind === "finale" ? 2.55 : 2.75;
+      const gap = Math.max(0, toTravel - fromTravel);
       const steps = Math.max(1, Math.ceil(gap / spacing));
       for (let index = 1; index <= steps; index += 1) {
-        emitSmoke(lerpPoint(lastSmokePoint, point, index / steps));
+        const sampled = pointOnRoute(
+          activeRoute,
+          fromTravel + (gap * index) / steps,
+        );
+        if (sampled.draw) emitSmoke(sampled.point, kind);
       }
-      lastSmokePoint = point;
     };
 
     const drawSmoke = (elapsed: number, now: number) => {
@@ -488,15 +645,15 @@ export default function Home() {
           0,
           1,
         );
-        layerOpacity = 1 - fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
+        layerOpacity = 1 - smoothstep(fadeProgress);
         if (fadeProgress >= 1) {
           particles.length = 0;
           smokeFadeStartedAt = null;
         }
       }
+
       context.save();
       context.globalCompositeOperation = "screen";
-
       for (let index = particles.length - 1; index >= 0; index -= 1) {
         const particle = particles[index];
         particle.life -= elapsed;
@@ -507,11 +664,15 @@ export default function Home() {
 
         particle.x += particle.driftX * elapsed;
         particle.y += particle.driftY * elapsed;
-        particle.radius += elapsed * 0.00018;
+        particle.radius += elapsed * (particle.kind === "stunt" ? 0.00042 : 0.00017);
         const age = 1 - particle.life / particle.maxLife;
-        const fadeIn = clamp(age / 0.035, 0, 1);
-        context.globalAlpha = particle.alpha * fadeIn * layerOpacity;
-        const diameter = particle.radius * 3.4 * (1 + fadeProgress * 0.55);
+        const fadeIn = clamp(age / (particle.kind === "stunt" ? 0.035 : 0.009), 0, 1);
+        const naturalFade =
+          particle.kind === "stunt"
+            ? clamp(particle.life / (particle.maxLife * 0.5), 0, 1)
+            : 1;
+        context.globalAlpha = particle.alpha * fadeIn * naturalFade * layerOpacity;
+        const diameter = particle.radius * 3.9 * (1 + fadeProgress * 0.48);
         context.drawImage(
           sprite,
           particle.x - diameter / 2,
@@ -523,89 +684,251 @@ export default function Home() {
       context.restore();
     };
 
-    const startWriting = (
-      now: number,
-      rocketX: number,
-      rocketY: number,
-      heading: number,
-    ) => {
-      let messageIndex = Math.floor(Math.random() * FLIRTY_MESSAGES.length);
-      if (messageIndex === lastMessageIndex) {
-        messageIndex = (messageIndex + 1) % FLIRTY_MESSAGES.length;
-      }
-      lastMessageIndex = messageIndex;
-      const message = FLIRTY_MESSAGES[messageIndex];
-      const radians = (heading * Math.PI) / 180;
-      const tailOffset = rocket.offsetWidth * 0.43;
-      const startTangent = { x: Math.cos(radians), y: Math.sin(radians) };
-      const startTail = {
-        x: rocketX - startTangent.x * tailOffset,
-        y: rocketY - startTangent.y * tailOffset,
-      };
-      route = buildMessageRoute(message, width, height, startTail, startTangent);
+    const startWriting = (now: number) => {
+      const message = takeMessage();
+      const startTail = { x: -150, y: height * 0.27 };
+      route = buildMessageRoute(
+        message,
+        width,
+        height,
+        startTail,
+        { x: 1, y: -0.04 },
+      );
       routeStartedAt = now;
       mode = "writing";
-      nextMessageAt = Number.POSITIVE_INFINITY;
       particles.length = 0;
       smokeFadeStartedAt = null;
-      lastSmokePoint = null;
+      lastRouteTravel = 0;
+      bank = 0;
+      previousHeading = 0;
       setCurrentMessage(message);
+    };
+
+    const startFinale = (now: number) => {
+      const finale = buildHeartRoute(width, height, "finale");
+      route = finale.route;
+      finaleCenter = finale.center;
+      finaleStart = finale.heartStart;
+      routeStartedAt = now;
+      mode = "finale";
+      particles.length = 0;
+      smokeFadeStartedAt = null;
+      lastRouteTravel = 0;
+      bank = 0;
+      previousHeading = 0;
+      setCurrentMessage("A heart just for you");
+    };
+
+    const startShow = (now: number) => {
+      const intro = buildHeartRoute(width, height, "intro");
+      route = intro.route;
+      routeStartedAt = now;
+      mode = "intro";
+      showMessageCount = 0;
+      messagesThisShow = Math.random() > 0.58 ? 4 : 3;
+      particles.length = 0;
+      smokeFadeStartedAt = null;
+      lastRouteTravel = 0;
+      nextActionAt = Number.POSITIVE_INFINITY;
+      bank = 0;
+      previousHeading = 0;
+      rocket.style.opacity = "1";
+      setCurrentMessage("A little surprise is on the way");
+    };
+
+    const beginClearing = (now: number, action: NextAction) => {
+      mode = "clearing";
+      route = null;
+      smokeFadeStartedAt = now + smokeHoldDuration;
+      nextAction = action;
+      nextActionAt =
+        now + smokeHoldDuration + smokeFadeDuration + clearSkyDuration;
+      rocket.style.opacity = "0";
+    };
+
+    const resize = () => {
+      const bounds = scene.getBoundingClientRect();
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      const changed =
+        Math.abs(width - bounds.width) > 3 ||
+        Math.abs(height - bounds.height) > 3;
+      width = bounds.width;
+      height = bounds.height;
+      canvas.width = Math.round(width * pixelRatio);
+      canvas.height = Math.round(height * pixelRatio);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      if (changed && width > 0 && height > 0) {
+        startShow(performance.now());
+      }
     };
 
     const animate = (now: number) => {
       const elapsed = clamp(now - lastFrame, 0, 42);
       lastFrame = now;
       const tailOffset = rocket.offsetWidth * 0.43;
-      let rocketX = -130;
+      let rocketX = -170;
       let rocketY = height * 0.3;
       let heading = 0;
-      let roll = 0;
+      let roll = bank;
+      let rocketScale = 1;
+      let visible = false;
 
-      if (mode === "writing" && route && route.length > 1) {
-        const speed = width < 620 ? 90 : 118;
+      if (
+        route &&
+        route.length > 1 &&
+        (mode === "intro" || mode === "writing" || mode === "finale")
+      ) {
+        const speed =
+          mode === "writing"
+            ? width < 620
+              ? 91
+              : 120
+            : mode === "intro"
+              ? width < 620
+                ? 145
+                : 186
+              : width < 620
+                ? 108
+                : 142;
         const travelled = (now - routeStartedAt) * (speed / 1000);
-        const routeLength = route.at(-1)?.travel ?? 0;
+        const routeLength = route.at(-1)?.travel ?? 1;
+        const routeProgress = clamp(travelled / routeLength, 0, 1);
+        const sampledTravel = Math.min(travelled, routeLength);
+        const smokeKind: SmokeParticle["kind"] =
+          mode === "intro" ? "stunt" : mode === "writing" ? "message" : "finale";
+        traceRouteSmoke(route, lastRouteTravel, sampledTravel, smokeKind);
+        lastRouteTravel = sampledTravel;
 
         if (travelled >= routeLength) {
-          mode = "cruise";
-          route = null;
-          cruiseStartedAt = now;
-          smokeFadeStartedAt = now + smokeHoldDuration;
-          nextMessageAt =
-            now + smokeHoldDuration + smokeFadeDuration + 1000;
-          lastSmokePoint = null;
-          rocket.style.opacity = "0";
+          if (mode === "intro") {
+            mode = "pause";
+            route = null;
+            nextAction = "message";
+            nextActionAt = now + 1450;
+            rocket.style.opacity = "0";
+          } else if (mode === "writing") {
+            showMessageCount += 1;
+            beginClearing(
+              now,
+              showMessageCount >= messagesThisShow ? "finale" : "message",
+            );
+          } else {
+            mode = "flythrough";
+            route = null;
+            flythroughStartedAt = now;
+            setCurrentMessage("Just for you");
+          }
         } else {
           const routeState = pointOnRoute(route, travelled);
-          heading = (Math.atan2(routeState.tangent.y, routeState.tangent.x) * 180) / Math.PI;
+          heading =
+            (Math.atan2(routeState.tangent.y, routeState.tangent.x) * 180) /
+            Math.PI;
+          const headingChange = ((heading - previousHeading + 540) % 360) - 180;
+          const targetBank = clamp(headingChange * 3.1, -42, 42);
+          bank += (targetBank - bank) * clamp(elapsed * 0.009, 0, 1);
+          previousHeading = heading;
           rocketX = routeState.point.x + routeState.tangent.x * tailOffset;
           rocketY = routeState.point.y + routeState.tangent.y * tailOffset;
-          extendSmokeTrail(routeState.point, routeState.draw);
-          rocket.style.opacity = "1";
-        }
-      } else {
-        const cycleDuration = 9800 + width * 1.35;
-        const phase = ((now - cruiseStartedAt) % cycleDuration) / cycleDuration;
-        const eased = phase * phase * (3 - 2 * phase);
-        rocketX = -130 + (width + 260) * eased;
-        rocketY = height * (0.31 + 0.055 * Math.sin(phase * Math.PI * 2 + 0.35));
-        const dx = (width + 260) * (6 * phase * (1 - phase)) + 1;
-        const dy = height * 0.11 * Math.PI * Math.cos(phase * Math.PI * 2 + 0.35);
-        heading = clamp((Math.atan2(dy, dx) * 180) / Math.PI, -12, 12);
-        if (phase > 0.54 && phase < 0.72) {
-          const rollProgress = (phase - 0.54) / 0.18;
-          roll = (0.5 - Math.cos(rollProgress * Math.PI) / 2) * 360;
-        }
-        lastSmokePoint = null;
-        rocket.style.opacity = "1";
+          visible = true;
 
-        if (now >= nextMessageAt) {
-          startWriting(now, rocketX, rocketY, heading);
+          if (mode === "intro") {
+            const arrival = smoothstep(routeProgress / 0.16);
+            rocketScale = 0.38 + arrival * 0.62;
+            const rollProgress = smoothstep((routeProgress - 0.08) / 0.38);
+            roll = bank + rollProgress * 360;
+          } else if (mode === "writing") {
+            roll = bank;
+          } else {
+            roll = bank;
+            rocketScale = 1.04;
+          }
         }
+      } else if (mode === "flythrough") {
+        const duration = 2050;
+        const progress = clamp((now - flythroughStartedAt) / duration, 0, 1);
+        const flightProgress = progress ** 1.35;
+        const controlA = {
+          x: finaleCenter.x,
+          y: finaleCenter.y - height * 0.02,
+        };
+        const controlB = {
+          x: finaleCenter.x + width * 0.08,
+          y: height * 0.62,
+        };
+        const end = { x: width * 0.77, y: height * 0.84 };
+        const inverse = 1 - flightProgress;
+        rocketX =
+          inverse ** 3 * finaleStart.x +
+          3 * inverse * inverse * flightProgress * controlA.x +
+          3 * inverse * flightProgress ** 2 * controlB.x +
+          flightProgress ** 3 * end.x;
+        rocketY =
+          inverse ** 3 * finaleStart.y +
+          3 * inverse * inverse * flightProgress * controlA.y +
+          3 * inverse * flightProgress ** 2 * controlB.y +
+          flightProgress ** 3 * end.y;
+        const nextAmount = clamp(flightProgress + 0.008, 0, 1);
+        const nextInverse = 1 - nextAmount;
+        const nextX =
+          nextInverse ** 3 * finaleStart.x +
+          3 * nextInverse * nextInverse * nextAmount * controlA.x +
+          3 * nextInverse * nextAmount ** 2 * controlB.x +
+          nextAmount ** 3 * end.x;
+        const nextY =
+          nextInverse ** 3 * finaleStart.y +
+          3 * nextInverse * nextInverse * nextAmount * controlA.y +
+          3 * nextInverse * nextAmount ** 2 * controlB.y +
+          nextAmount ** 3 * end.y;
+        heading = (Math.atan2(nextY - rocketY, nextX - rocketX) * 180) / Math.PI;
+        roll = progress * 210;
+        rocketScale = 1.04 + smoothstep(progress) * 2.65;
+        visible = progress < 1;
+        rocket.style.opacity = `${1 - smoothstep((progress - 0.7) / 0.3)}`;
+
+        if (progress >= 1) {
+          mode = "pause";
+          nextAction = "restart";
+          smokeFadeStartedAt = now + finaleHoldDuration;
+          nextActionAt =
+            now +
+            finaleHoldDuration +
+            smokeFadeDuration +
+            clearSkyDuration +
+            900;
+          rocket.style.opacity = "0";
+        }
+      } else if (
+        (mode === "pause" || mode === "clearing") &&
+        now >= nextActionAt
+      ) {
+        if (nextAction === "message") startWriting(now);
+        else if (nextAction === "finale") startFinale(now);
+        else startShow(now);
       }
 
-      rocket.style.transform = `translate3d(${rocketX}px, ${rocketY}px, 0) rotate(${heading}deg)`;
-      rollElement.style.transform = `perspective(420px) rotateX(${roll}deg)`;
+      if (mode !== "flythrough") {
+        rocket.style.opacity = visible ? "1" : "0";
+      }
+      rocket.style.transform = `translate3d(${rocketX}px, ${rocketY}px, 0) rotate(${heading}deg) scale(${rocketScale})`;
+      rollElement.style.transform = `perspective(560px) rotateX(${roll}deg) rotateY(${bank * 0.12}deg)`;
+      rollElement.style.setProperty(
+        "--bank-light",
+        `${clamp(50 + bank * 0.7, 22, 78)}%`,
+      );
+
+      if (visible && width > 0 && height > 0) {
+        const cameraX = clamp((0.5 - rocketX / width) * 7, -5, 5);
+        const cameraY = clamp((0.42 - rocketY / height) * 5, -3, 3);
+        scene.style.setProperty("--camera-x", `${cameraX}px`);
+        scene.style.setProperty("--camera-y", `${cameraY}px`);
+        scene.style.setProperty("--camera-far-x", `${cameraX * 0.45}px`);
+        scene.style.setProperty("--camera-far-y", `${cameraY * 0.45}px`);
+        scene.style.setProperty("--camera-near-x", `${cameraX * -0.34}px`);
+        scene.style.setProperty("--camera-near-y", `${cameraY * -0.2}px`);
+      }
+
       drawSmoke(elapsed, now);
       frameId = requestAnimationFrame(animate);
     };
