@@ -511,7 +511,10 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rocketRef = useRef<HTMLDivElement>(null);
   const rollRef = useRef<HTMLDivElement>(null);
-  const [currentMessage, setCurrentMessage] = useState("A little surprise is on the way");
+  const [currentMessage, setCurrentMessage] = useState("Ready to launch");
+  const [launchState, setLaunchState] = useState<
+    "ready" | "launching" | "complete"
+  >("ready");
 
   const stars = Array.from({ length: 38 }, (_, index) => ({
     left: (index * 37 + 11) % 100,
@@ -519,6 +522,20 @@ export default function Home() {
     size: 1 + ((index * 7) % 3),
     delay: -((index * 0.31) % 4),
   }));
+
+  const windStreams = Array.from({ length: 18 }, (_, index) => ({
+    left: (index * 29 + 7) % 100,
+    delay: -((index * 0.17) % 0.92),
+    duration: 0.58 + ((index * 11) % 28) / 100,
+    length: 58 + ((index * 17) % 92),
+    drift: -18 + ((index * 13) % 37),
+  }));
+
+  const handleLaunch = () => {
+    if (launchState !== "ready") return;
+    setLaunchState("launching");
+    sceneRef.current?.dispatchEvent(new Event("rocket-launch"));
+  };
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -580,6 +597,8 @@ export default function Home() {
     }
 
     type Mode =
+      | "waiting"
+      | "launch"
       | "intro"
       | "writing"
       | "clearing"
@@ -597,7 +616,7 @@ export default function Home() {
     let routeStartedAt = 0;
     let lastRouteTravel = 0;
     let smokeFadeStartedAt: number | null = null;
-    let mode: Mode = "intro";
+    let mode: Mode = "waiting";
     let nextAction: NextAction = "message";
     let nextActionAt = Number.POSITIVE_INFINITY;
     let messageBag: number[] = [];
@@ -609,6 +628,7 @@ export default function Home() {
     let finaleCenter: Point = { x: 0, y: 0 };
     let finaleStart: Point = { x: 0, y: 0 };
     let flythroughStartedAt = 0;
+    let launchStartedAt = 0;
     let finaleGlowStartedAt: number | null = null;
     let messageGlowStartedAt: number | null = null;
     const messagesPerShow = 3;
@@ -892,6 +912,22 @@ export default function Home() {
       setCurrentMessage("A little surprise is on the way");
     };
 
+    const beginLaunch = (now: number) => {
+      if (mode !== "waiting") return;
+      mode = "launch";
+      launchStartedAt = now;
+      route = null;
+      particles.length = 0;
+      smokeFadeStartedAt = null;
+      finaleGlowStartedAt = null;
+      messageGlowStartedAt = null;
+      showMessageCount = 0;
+      bank = 0;
+      previousHeading = -90;
+      rocket.style.opacity = "1";
+      setCurrentMessage("Engines ignited. Lifting off");
+    };
+
     const beginClearing = (now: number, action: NextAction) => {
       mode = "clearing";
       route = null;
@@ -916,7 +952,9 @@ export default function Home() {
       canvas.style.height = `${height}px`;
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       if (changed && width > 0 && height > 0) {
-        startShow(performance.now());
+        if (mode !== "waiting" && mode !== "launch") {
+          startShow(performance.now());
+        }
       }
     };
 
@@ -932,7 +970,56 @@ export default function Home() {
       let cameraZoom = 1.025;
       let visible = false;
 
-      if (
+      if (mode === "waiting") {
+        rocketX = width * 0.5;
+        rocketY = height * (width < 620 ? 0.79 : 0.77);
+        heading = -90;
+        roll = 0;
+        rocketScale = width < 620 ? 1.3 : 1.2;
+        cameraZoom = 1.052;
+        visible = true;
+      } else if (mode === "launch") {
+        const duration = 4550;
+        const progress = clamp((now - launchStartedAt) / duration, 0, 1);
+        const ignition = smoothstep(progress / 0.17);
+        const climb = smoothstep((progress - 0.13) / 0.87);
+        const launchY = height * (width < 620 ? 0.79 : 0.77);
+        const rumbleStrength =
+          (1 - smoothstep((progress - 0.1) / 0.28)) * ignition * 2.2;
+        const rumbleX = Math.sin(now * 0.082) * rumbleStrength;
+        const rumbleY = Math.cos(now * 0.104) * rumbleStrength * 0.62;
+        const sway = Math.sin(climb * Math.PI * 2.15) * width * 0.018 * climb;
+
+        rocketX = width * 0.5 + sway + rumbleX;
+        rocketY = launchY - height * 1.13 * climb + rumbleY;
+        heading = -90 + Math.sin(climb * Math.PI * 1.65) * 4.2;
+        roll = Math.sin(now * 0.017) * ignition * (1 - climb) * 5;
+        rocketScale =
+          (width < 620 ? 1.3 : 1.2) * (1 - smoothstep(climb) * 0.48);
+        cameraZoom = 1.052 + ignition * 0.018 - climb * 0.035;
+        visible = progress < 1;
+
+        const shakeFade = (1 - climb) * ignition;
+        scene.style.setProperty(
+          "--launch-shake-x",
+          `${Math.sin(now * 0.091) * shakeFade * 2.1}px`,
+        );
+        scene.style.setProperty(
+          "--launch-shake-y",
+          `${Math.cos(now * 0.113) * shakeFade * 1.25}px`,
+        );
+
+        if (progress >= 1) {
+          mode = "pause";
+          nextAction = "message";
+          nextActionAt = now + 700;
+          rocket.style.opacity = "0";
+          scene.style.setProperty("--launch-shake-x", "0px");
+          scene.style.setProperty("--launch-shake-y", "0px");
+          setLaunchState("complete");
+          setCurrentMessage("The rocket reached the open sky");
+        }
+      } else if (
         route &&
         route.length > 1 &&
         (mode === "intro" || mode === "writing" || mode === "finale")
@@ -1132,19 +1219,26 @@ export default function Home() {
     };
 
     resize();
+    const handleLaunchEvent = () => beginLaunch(performance.now());
+    scene.addEventListener("rocket-launch", handleLaunchEvent);
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(scene);
     frameId = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frameId);
+      scene.removeEventListener("rocket-launch", handleLaunchEvent);
       resizeObserver.disconnect();
     };
   }, []);
 
   return (
     <main className="sky-page">
-      <section className="flight-scene" ref={sceneRef} aria-label="A rocket writing flirty messages in the sky">
+      <section
+        className={`flight-scene launch-${launchState}`}
+        ref={sceneRef}
+        aria-label="A rocket launching and writing flirty messages in the sky"
+      >
         <div className="sky-gradient" aria-hidden="true" />
         <div className="atmospheric-haze" aria-hidden="true" />
         <div className="sun-glow" aria-hidden="true" />
@@ -1178,6 +1272,53 @@ export default function Home() {
         <div className="cloud cloud-d" aria-hidden="true" />
         <div className="cloud cloud-e" aria-hidden="true" />
         <MountainLine />
+
+        {launchState !== "complete" && (
+          <div className="launch-sequence">
+            <div className="launch-wind" aria-hidden="true">
+              {windStreams.map((stream, index) => (
+                <i
+                  key={index}
+                  style={
+                    {
+                      "--wind-left": `${stream.left}%`,
+                      "--wind-delay": `${stream.delay}s`,
+                      "--wind-duration": `${stream.duration}s`,
+                      "--wind-length": `${stream.length}px`,
+                      "--wind-drift": `${stream.drift}px`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </div>
+            <div className="launch-pad" aria-hidden="true">
+              <i className="pad-ring pad-ring-outer" />
+              <i className="pad-ring pad-ring-inner" />
+              <span className="launch-clamp clamp-left" />
+              <span className="launch-clamp clamp-right" />
+            </div>
+            <div className="launch-dust" aria-hidden="true">
+              <i /><i /><i /><i /><i />
+            </div>
+            <div className="launch-controls">
+              <p>A LITTLE SOMETHING FOR YOU</p>
+              <button
+                className="launch-button"
+                type="button"
+                onClick={handleLaunch}
+                disabled={launchState === "launching"}
+                aria-label="Launch the rocket"
+              >
+                <span className="launch-button-gloss" aria-hidden="true" />
+                <strong>{launchState === "launching" ? "LIFTOFF" : "LAUNCH"}</strong>
+              </button>
+              <span className="launch-hint">
+                {launchState === "launching" ? "ENGINES IGNITED" : "PRESS TO BEGIN"}
+              </span>
+            </div>
+          </div>
+        )}
+
         <canvas className="smoke-canvas" ref={canvasRef} aria-hidden="true" />
         <div className="completion-sparkles" aria-hidden="true">
           <i className="completion-sparkle sparkle-one" />
@@ -1186,14 +1327,17 @@ export default function Home() {
         </div>
 
         <div className="rocket-motion" ref={rocketRef}>
-          <div className="rocket-roll" ref={rollRef}><Rocket /></div>
+          <div className="rocket-roll" ref={rollRef}>
+            <div className="launch-plume" aria-hidden="true"><i /><i /><i /></div>
+            <Rocket />
+          </div>
         </div>
 
         <header className="flight-header">
           <p className="for-you"><span aria-hidden="true">♥</span> JUST FOR YOU</p>
         </header>
 
-        <p className="sr-only" aria-live="polite">The rocket is writing: {currentMessage}</p>
+        <p className="sr-only" aria-live="polite">Rocket status: {currentMessage}</p>
         <div className="cinematic-vignette" aria-hidden="true" />
         <div className="grain" aria-hidden="true" />
       </section>
