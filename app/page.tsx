@@ -93,8 +93,8 @@ function roundPrintStroke(points: Point[]) {
     const previous = points[index - 1];
     const corner = points[index];
     const next = points[index + 1];
-    const entry = lerpPoint(previous, corner, 0.84);
-    const exit = lerpPoint(corner, next, 0.16);
+    const entry = lerpPoint(previous, corner, 0.78);
+    const exit = lerpPoint(corner, next, 0.22);
     result.push(entry);
 
     for (let step = 1; step <= 5; step += 1) {
@@ -243,18 +243,33 @@ function buildMessageRoute(
   lines.forEach((line, lineIndex) => {
     const width = lineUnits(line) * scale;
     let cursor = (viewportWidth - width) / 2;
-    Array.from(line).forEach((character) => {
+    Array.from(line).forEach((character, characterIndex) => {
       if (character === " ") {
         cursor += scale * PRINT_WORD_GAP;
         return;
       }
 
       const glyph = PRINT_FONT[character] ?? PRINT_FONT.X;
-      glyph.strokes.forEach((stroke) => {
-        const transformed = stroke.map(([x, y]) => ({
-          x: cursor + x * glyph.width * scale,
-          y: startY + lineIndex * lineGap + y * letterHeight,
-        }));
+      glyph.strokes.forEach((stroke, strokeIndex) => {
+        const wobble = scale * (isPhone ? 0.012 : 0.009);
+        const transformed = stroke.map(([x, y], pointIndex) => {
+          const seed =
+            (lineIndex + 1) * 19 +
+            (characterIndex + 1) * 11 +
+            (strokeIndex + 1) * 7 +
+            (pointIndex + 1) * 3;
+          return {
+            x:
+              cursor +
+              x * glyph.width * scale +
+              Math.sin(seed * 1.37) * wobble,
+            y:
+              startY +
+              lineIndex * lineGap +
+              y * letterHeight +
+              Math.cos(seed * 1.11) * wobble,
+          };
+        });
         strokes.push({
           points: roundPrintStroke(transformed),
           line: lineIndex,
@@ -571,7 +586,7 @@ export default function Home() {
       | "finale"
       | "flythrough"
       | "pause";
-    type NextAction = "message" | "finale" | "restart";
+    type NextAction = "message" | "finale" | "finalMessage" | "restart";
 
     const particles: SmokeParticle[] = [];
     let width = 0;
@@ -588,17 +603,19 @@ export default function Home() {
     let messageBag: number[] = [];
     let lastMessageIndex = -1;
     let showMessageCount = 0;
-    let messagesThisShow = 3;
+    let writingFinalMessage = false;
     let bank = 0;
     let previousHeading = 0;
     let finaleCenter: Point = { x: 0, y: 0 };
     let finaleStart: Point = { x: 0, y: 0 };
     let flythroughStartedAt = 0;
     let finaleGlowStartedAt: number | null = null;
-    const smokeHoldDuration = 950;
-    const smokeFadeDuration = 2550;
-    const clearSkyDuration = 900;
-    const finaleHoldDuration = 1650;
+    let messageGlowStartedAt: number | null = null;
+    const messagesPerShow = 3;
+    const smokeHoldDuration = 2300;
+    const smokeFadeDuration = 1350;
+    const clearSkyDuration = 650;
+    const finaleHoldDuration = 2200;
 
     const smoothstep = (value: number) => {
       const amount = clamp(value, 0, 1);
@@ -723,6 +740,15 @@ export default function Home() {
           ? 0
           : clamp((now - finaleGlowStartedAt) / 1850, 0, 1);
       const finaleGlow = Math.sin(glowProgress * Math.PI);
+      const messageGlowProgress =
+        messageGlowStartedAt === null
+          ? 0
+          : clamp((now - messageGlowStartedAt) / 1600, 0, 1);
+      const messageGlow = Math.sin(messageGlowProgress * Math.PI);
+      scene.style.setProperty(
+        "--message-sparkle",
+        `${Math.max(0, messageGlow).toFixed(3)}`,
+      );
 
       context.save();
       context.globalCompositeOperation = "screen";
@@ -772,6 +798,18 @@ export default function Home() {
             glowDiameter,
           );
         }
+        if (particle.kind === "message" && messageGlow > 0.01) {
+          const messageGlowDiameter =
+            diameter * (2.15 + messageGlow * 0.72);
+          context.globalAlpha = particleOpacity * messageGlow * 0.13;
+          context.drawImage(
+            glowSprite,
+            particle.x - messageGlowDiameter / 2,
+            particle.y - messageGlowDiameter / 2,
+            messageGlowDiameter,
+            messageGlowDiameter,
+          );
+        }
         context.globalAlpha = particleOpacity;
         context.drawImage(
           particle.kind === "message" ? messageSprite : sprite,
@@ -784,8 +822,11 @@ export default function Home() {
       context.restore();
     };
 
-    const startWriting = (now: number) => {
-      const message = takeMessage();
+    const startMessageRoute = (
+      now: number,
+      message: string,
+      isFinalMessage: boolean,
+    ) => {
       const startTail = { x: -150, y: height * 0.27 };
       route = buildMessageRoute(
         message,
@@ -796,13 +837,23 @@ export default function Home() {
       );
       routeStartedAt = now;
       mode = "writing";
+      writingFinalMessage = isFinalMessage;
       particles.length = 0;
       smokeFadeStartedAt = null;
       finaleGlowStartedAt = null;
+      messageGlowStartedAt = null;
       lastRouteTravel = 0;
       bank = 0;
       previousHeading = 0;
       setCurrentMessage(message);
+    };
+
+    const startWriting = (now: number) => {
+      startMessageRoute(now, takeMessage(), false);
+    };
+
+    const startFinalMessage = (now: number) => {
+      startMessageRoute(now, "JUST FOR YOU", true);
     };
 
     const startFinale = (now: number) => {
@@ -815,6 +866,7 @@ export default function Home() {
       particles.length = 0;
       smokeFadeStartedAt = null;
       finaleGlowStartedAt = null;
+      messageGlowStartedAt = null;
       lastRouteTravel = 0;
       bank = 0;
       previousHeading = 0;
@@ -827,10 +879,11 @@ export default function Home() {
       routeStartedAt = now;
       mode = "intro";
       showMessageCount = 0;
-      messagesThisShow = Math.random() > 0.58 ? 4 : 3;
+      writingFinalMessage = false;
       particles.length = 0;
       smokeFadeStartedAt = null;
       finaleGlowStartedAt = null;
+      messageGlowStartedAt = null;
       lastRouteTravel = 0;
       nextActionAt = Number.POSITIVE_INFINITY;
       bank = 0;
@@ -913,11 +966,16 @@ export default function Home() {
             nextActionAt = now + 1450;
             rocket.style.opacity = "0";
           } else if (mode === "writing") {
-            showMessageCount += 1;
-            beginClearing(
-              now,
-              showMessageCount >= messagesThisShow ? "finale" : "message",
-            );
+            messageGlowStartedAt = now;
+            if (writingFinalMessage) {
+              beginClearing(now, "restart");
+            } else {
+              showMessageCount += 1;
+              beginClearing(
+                now,
+                showMessageCount >= messagesPerShow ? "finale" : "message",
+              );
+            }
           } else {
             mode = "flythrough";
             route = null;
@@ -1004,14 +1062,14 @@ export default function Home() {
 
         if (progress >= 1) {
           mode = "pause";
-          nextAction = "restart";
+          nextAction = "finalMessage";
           smokeFadeStartedAt = now + finaleHoldDuration;
           nextActionAt =
             now +
             finaleHoldDuration +
             smokeFadeDuration +
             clearSkyDuration +
-            900;
+            350;
           rocket.style.opacity = "0";
         }
       } else if (
@@ -1020,6 +1078,7 @@ export default function Home() {
       ) {
         if (nextAction === "message") startWriting(now);
         else if (nextAction === "finale") startFinale(now);
+        else if (nextAction === "finalMessage") startFinalMessage(now);
         else startShow(now);
       }
 
@@ -1105,11 +1164,11 @@ export default function Home() {
           ))}
           <span
             className="shooting-star"
-            style={{ "--shoot-top": "13%", "--shoot-delay": "-2s" } as CSSProperties}
+            style={{ "--shoot-top": "13%", "--shoot-delay": "-4s" } as CSSProperties}
           />
           <span
             className="shooting-star"
-            style={{ "--shoot-top": "31%", "--shoot-delay": "-11s" } as CSSProperties}
+            style={{ "--shoot-top": "31%", "--shoot-delay": "-18s" } as CSSProperties}
           />
         </div>
 
@@ -1120,16 +1179,17 @@ export default function Home() {
         <div className="cloud cloud-e" aria-hidden="true" />
         <MountainLine />
         <canvas className="smoke-canvas" ref={canvasRef} aria-hidden="true" />
+        <div className="completion-sparkles" aria-hidden="true">
+          <i className="completion-sparkle sparkle-one" />
+          <i className="completion-sparkle sparkle-two" />
+          <i className="completion-sparkle sparkle-three" />
+        </div>
 
         <div className="rocket-motion" ref={rocketRef}>
           <div className="rocket-roll" ref={rollRef}><Rocket /></div>
         </div>
 
         <header className="flight-header">
-          <div className="brand" aria-label="Love, launched">
-            <span className="brand-orbit" aria-hidden="true"><i /></span>
-            <span>LOVE, LAUNCHED.</span>
-          </div>
           <p className="for-you"><span aria-hidden="true">♥</span> JUST FOR YOU</p>
         </header>
 
