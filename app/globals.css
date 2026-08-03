@@ -32,6 +32,7 @@ body {
   overflow: hidden;
   background: #111a42;
   --sky-scale: 1.025;
+  --message-sparkle: 0;
 }
 
 .sky-gradient {
@@ -183,20 +184,20 @@ body {
   z-index: -3;
   top: var(--shoot-top);
   left: -18%;
-  width: 74px;
+  width: 88px;
   height: 1px;
   border-radius: 50%;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.82));
   filter: drop-shadow(0 0 4px rgba(209,230,255,0.72));
   opacity: 0;
   transform: rotate(-18deg);
-  animation: shooting-star 18s var(--shoot-delay) ease-in infinite;
+  animation: shooting-star 27s var(--shoot-delay) ease-in infinite;
 }
 
 @keyframes shooting-star {
-  0%, 68% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-18deg); }
-  70% { opacity: 0.78; }
-  75% { opacity: 0; transform: translate3d(122vw, 34vh, 0) rotate(-18deg); }
+  0%, 81% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-18deg); }
+  82% { opacity: 0.86; }
+  86% { opacity: 0; transform: translate3d(122vw, 34vh, 0) rotate(-18deg); }
   100% { opacity: 0; }
 }
 
@@ -249,6 +250,28 @@ body {
   z-index: 4;
   pointer-events: none;
 }
+
+.completion-sparkles {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: var(--message-sparkle);
+}
+
+.completion-sparkle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #fff7dd;
+  clip-path: polygon(50% 0, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 38%);
+  filter: drop-shadow(0 0 7px rgba(255, 210, 162, 0.9));
+  transform: scale(var(--message-sparkle)) rotate(18deg);
+}
+
+.sparkle-one { left: 7%; top: 17%; }
+.sparkle-two { right: 8%; top: 35%; width: 5px; height: 5px; }
+.sparkle-three { left: 18%; top: 43%; width: 4px; height: 4px; }
 
 .rocket-motion {
   position: absolute;
@@ -687,41 +710,10 @@ body {
   z-index: 12;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   width: 100%;
   padding: clamp(24px, 3.2vw, 48px) clamp(22px, 4vw, 64px);
   pointer-events: none;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--ink);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-}
-
-.brand-orbit {
-  position: relative;
-  display: inline-block;
-  width: 27px;
-  height: 13px;
-  border: 1px solid rgba(255,255,255,0.8);
-  border-radius: 50%;
-  transform: rotate(-22deg);
-}
-
-.brand-orbit i {
-  position: absolute;
-  right: 1px;
-  top: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px rgba(255, 116, 72, 0.8);
 }
 
 .for-you {
@@ -779,8 +771,6 @@ body {
 
 @media (max-width: 620px) {
   .flight-header { padding: 24px 20px; }
-  .brand { gap: 9px; font-size: 8px; }
-  .brand-orbit { width: 23px; height: 11px; }
   .for-you { gap: 6px; font-size: 7px; }
 
   .rocket-roll {
