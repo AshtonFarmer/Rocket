@@ -4,7 +4,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 
 type Point = { x: number; y: number };
 type RawStroke = Array<[number, number]>;
-type ScriptGlyph = { width: number; points: RawStroke };
+type PrintGlyph = { width: number; strokes: RawStroke[] };
 type RoutePoint = Point & { draw: boolean; travel: number };
 type SmokeParticle = Point & {
   radius: number;
@@ -16,55 +16,55 @@ type SmokeParticle = Point & {
   kind: "message" | "stunt" | "finale";
 };
 
-const SCRIPT_LETTER_GAP = 0.065;
-const SCRIPT_WORD_GAP = 0.58;
+const PRINT_LETTER_GAP = 0.12;
+const PRINT_WORD_GAP = 0.58;
 
 const FLIRTY_MESSAGES = [
   "HEY CUTIE",
-  "MY FAVORITE VIEW",
-  "HOW ARE YOU THIS CUTE",
+  "FAVORITE VIEW",
+  "SO DAMN CUTE",
   "YOU MAKE ME BLUSH",
-  "I WOULD ORBIT YOU",
+  "ORBITING YOU",
   "STUCK ON YOU",
-  "YOU ARE MY TYPE",
-  "CUTEST IN THE GALAXY",
+  "JUST MY TYPE",
+  "GALAXY CUTIE",
   "YOU MAKE ME SOAR",
-  "COME FLY WITH ME",
+  "FLY WITH ME",
   "LOOKING CUTE",
-  "YOU GOT ME FLYING",
+  "GOT ME FLYING",
   "I LIKE YOUR FACE",
   "CRUSH ON BOARD",
-  "YOU LOOK SO GOOD",
-  "KINDA CRAZY ABOUT YOU",
+  "YOU LOOK GOOD",
+  "CRAZY ABOUT YOU",
 ] as const;
 
-const SCRIPT_FONT: Record<string, ScriptGlyph> = {
-  A: { width: 0.82, points: [[0, 0.82], [0.14, 0.7], [0.29, 0.49], [0.5, 0.43], [0.7, 0.55], [0.67, 0.77], [0.5, 0.85], [0.27, 0.78], [0.22, 0.61], [0.4, 0.47], [0.68, 0.52], [0.77, 0.82], [1, 0.82]] },
-  B: { width: 0.76, points: [[0, 0.82], [0.15, 0.7], [0.28, 0.34], [0.34, 0.08], [0.25, 0.14], [0.23, 0.63], [0.28, 0.82], [0.45, 0.62], [0.66, 0.49], [0.84, 0.56], [0.78, 0.75], [0.58, 0.84], [0.4, 0.76], [0.61, 0.7], [0.84, 0.72], [1, 0.82]] },
-  C: { width: 0.73, points: [[0, 0.82], [0.14, 0.73], [0.24, 0.57], [0.45, 0.45], [0.71, 0.46], [0.84, 0.57], [0.72, 0.74], [0.49, 0.84], [0.25, 0.81], [0.46, 0.78], [0.76, 0.79], [1, 0.82]] },
-  D: { width: 0.8, points: [[0, 0.82], [0.13, 0.7], [0.26, 0.5], [0.48, 0.44], [0.67, 0.55], [0.64, 0.77], [0.46, 0.85], [0.24, 0.77], [0.28, 0.56], [0.59, 0.49], [0.73, 0.8], [0.73, 0.34], [0.68, 0.09], [0.61, 0.16], [0.75, 0.82], [1, 0.82]] },
-  E: { width: 0.68, points: [[0, 0.82], [0.16, 0.71], [0.29, 0.54], [0.53, 0.49], [0.69, 0.58], [0.55, 0.69], [0.28, 0.68], [0.36, 0.82], [0.61, 0.85], [0.82, 0.76], [1, 0.82]] },
-  F: { width: 0.68, points: [[0, 0.82], [0.15, 0.73], [0.28, 0.48], [0.41, 0.16], [0.58, 0.08], [0.71, 0.18], [0.58, 0.43], [0.38, 0.82], [0.39, 1.05], [0.53, 1.12], [0.69, 1], [0.62, 0.82], [1, 0.82]] },
-  G: { width: 0.78, points: [[0, 0.82], [0.14, 0.7], [0.28, 0.5], [0.5, 0.44], [0.68, 0.55], [0.63, 0.78], [0.43, 0.85], [0.22, 0.76], [0.29, 0.55], [0.59, 0.5], [0.73, 0.82], [0.69, 1.02], [0.5, 1.13], [0.34, 1.03], [0.48, 0.89], [0.78, 0.82], [1, 0.82]] },
-  H: { width: 0.73, points: [[0, 0.82], [0.14, 0.7], [0.28, 0.34], [0.34, 0.08], [0.25, 0.15], [0.24, 0.82], [0.43, 0.64], [0.59, 0.49], [0.76, 0.54], [0.8, 0.82], [1, 0.82]] },
-  I: { width: 0.43, points: [[0, 0.82], [0.16, 0.72], [0.27, 0.5], [0.38, 0.47], [0.34, 0.82], [0.64, 0.82], [1, 0.82]] },
-  J: { width: 0.52, points: [[0, 0.82], [0.14, 0.72], [0.25, 0.49], [0.37, 0.47], [0.33, 0.9], [0.24, 1.09], [0.1, 1.12], [0.03, 1.02], [0.18, 0.88], [0.53, 0.82], [1, 0.82]] },
-  K: { width: 0.69, points: [[0, 0.82], [0.14, 0.7], [0.28, 0.34], [0.34, 0.08], [0.25, 0.15], [0.24, 0.82], [0.4, 0.65], [0.63, 0.48], [0.51, 0.66], [0.78, 0.82], [1, 0.82]] },
-  L: { width: 0.57, points: [[0, 0.82], [0.15, 0.7], [0.31, 0.34], [0.41, 0.08], [0.58, 0.11], [0.52, 0.32], [0.31, 0.65], [0.28, 0.82], [0.57, 0.85], [1, 0.82]] },
-  M: { width: 0.96, points: [[0, 0.82], [0.14, 0.72], [0.27, 0.5], [0.42, 0.49], [0.45, 0.82], [0.54, 0.62], [0.68, 0.48], [0.81, 0.52], [0.83, 0.82], [1, 0.82]] },
-  N: { width: 0.77, points: [[0, 0.82], [0.16, 0.72], [0.3, 0.49], [0.47, 0.5], [0.5, 0.82], [0.62, 0.62], [0.77, 0.49], [0.89, 0.56], [0.87, 0.82], [1, 0.82]] },
-  O: { width: 0.76, points: [[0, 0.82], [0.13, 0.7], [0.24, 0.52], [0.44, 0.45], [0.65, 0.52], [0.73, 0.7], [0.62, 0.82], [0.4, 0.86], [0.2, 0.75], [0.23, 0.55], [0.47, 0.48], [0.7, 0.65], [0.78, 0.82], [1, 0.82]] },
-  P: { width: 0.7, points: [[0, 0.82], [0.14, 0.72], [0.24, 0.51], [0.29, 0.82], [0.27, 1.08], [0.39, 1.1], [0.37, 0.82], [0.46, 0.62], [0.62, 0.49], [0.79, 0.54], [0.83, 0.7], [0.72, 0.8], [0.53, 0.78], [0.73, 0.75], [1, 0.82]] },
-  Q: { width: 0.78, points: [[0, 0.82], [0.13, 0.7], [0.24, 0.52], [0.44, 0.45], [0.65, 0.52], [0.73, 0.7], [0.62, 0.82], [0.4, 0.86], [0.2, 0.75], [0.23, 0.55], [0.47, 0.48], [0.7, 0.65], [0.77, 0.83], [0.83, 1.08], [0.69, 1.12], [0.67, 0.84], [1, 0.82]] },
-  R: { width: 0.65, points: [[0, 0.82], [0.15, 0.72], [0.27, 0.51], [0.35, 0.49], [0.34, 0.82], [0.44, 0.65], [0.58, 0.5], [0.73, 0.54], [0.68, 0.68], [0.54, 0.72], [0.78, 0.82], [1, 0.82]] },
-  S: { width: 0.65, points: [[0, 0.82], [0.13, 0.73], [0.26, 0.54], [0.46, 0.47], [0.65, 0.52], [0.6, 0.64], [0.36, 0.68], [0.27, 0.78], [0.45, 0.85], [0.7, 0.78], [0.83, 0.72], [1, 0.82]] },
-  T: { width: 0.6, points: [[0, 0.82], [0.14, 0.72], [0.27, 0.48], [0.36, 0.16], [0.49, 0.08], [0.58, 0.18], [0.46, 0.44], [0.35, 0.82], [0.57, 0.85], [0.8, 0.78], [1, 0.82]] },
-  U: { width: 0.74, points: [[0, 0.82], [0.14, 0.71], [0.25, 0.5], [0.33, 0.49], [0.3, 0.77], [0.45, 0.85], [0.65, 0.78], [0.75, 0.5], [0.84, 0.51], [0.82, 0.82], [1, 0.82]] },
-  V: { width: 0.72, points: [[0, 0.82], [0.14, 0.71], [0.27, 0.49], [0.38, 0.5], [0.36, 0.76], [0.5, 0.86], [0.69, 0.74], [0.82, 0.5], [0.9, 0.52], [0.84, 0.82], [1, 0.82]] },
-  W: { width: 0.98, points: [[0, 0.82], [0.12, 0.71], [0.22, 0.5], [0.31, 0.51], [0.29, 0.76], [0.41, 0.85], [0.54, 0.76], [0.63, 0.5], [0.72, 0.51], [0.7, 0.76], [0.82, 0.85], [0.92, 0.73], [1, 0.82]] },
-  X: { width: 0.72, points: [[0, 0.82], [0.13, 0.72], [0.28, 0.51], [0.45, 0.5], [0.61, 0.78], [0.75, 0.84], [0.64, 0.65], [0.53, 0.56], [0.7, 0.49], [0.86, 0.55], [0.82, 0.82], [1, 0.82]] },
-  Y: { width: 0.74, points: [[0, 0.82], [0.14, 0.71], [0.25, 0.5], [0.34, 0.49], [0.31, 0.77], [0.46, 0.85], [0.66, 0.76], [0.76, 0.5], [0.85, 0.52], [0.81, 0.92], [0.68, 1.11], [0.52, 1.08], [0.59, 0.91], [0.83, 0.82], [1, 0.82]] },
-  Z: { width: 0.68, points: [[0, 0.82], [0.14, 0.72], [0.3, 0.51], [0.55, 0.48], [0.72, 0.55], [0.56, 0.68], [0.33, 0.81], [0.54, 0.85], [0.76, 0.77], [1, 0.82]] },
+const PRINT_FONT: Record<string, PrintGlyph> = {
+  A: { width: 0.82, strokes: [[[0.04, 1], [0.5, 0], [0.96, 1]], [[0.24, 0.62], [0.76, 0.62]]] },
+  B: { width: 0.78, strokes: [[[0.04, 1], [0.04, 0], [0.5, 0], [0.82, 0.08], [0.94, 0.25], [0.84, 0.43], [0.5, 0.5], [0.04, 0.5], [0.5, 0.5], [0.88, 0.58], [0.98, 0.76], [0.86, 0.94], [0.5, 1], [0.04, 1]]] },
+  C: { width: 0.8, strokes: [[[0.96, 0.16], [0.78, 0.04], [0.42, 0], [0.14, 0.15], [0.03, 0.5], [0.14, 0.85], [0.42, 1], [0.78, 0.96], [0.96, 0.84]]] },
+  D: { width: 0.82, strokes: [[[0.04, 1], [0.04, 0], [0.46, 0], [0.76, 0.1], [0.95, 0.5], [0.76, 0.9], [0.46, 1], [0.04, 1]]] },
+  E: { width: 0.7, strokes: [[[0.96, 0], [0.04, 0], [0.04, 1], [0.96, 1]], [[0.04, 0.5], [0.76, 0.5]]] },
+  F: { width: 0.7, strokes: [[[0.04, 1], [0.04, 0], [0.96, 0]], [[0.04, 0.5], [0.76, 0.5]]] },
+  G: { width: 0.84, strokes: [[[0.96, 0.16], [0.78, 0.04], [0.42, 0], [0.14, 0.15], [0.03, 0.5], [0.14, 0.85], [0.42, 1], [0.78, 0.96], [0.96, 0.8], [0.96, 0.56], [0.58, 0.56]]] },
+  H: { width: 0.8, strokes: [[[0.04, 0], [0.04, 1]], [[0.96, 0], [0.96, 1]], [[0.04, 0.5], [0.96, 0.5]]] },
+  I: { width: 0.46, strokes: [[[0.08, 0], [0.92, 0]], [[0.5, 0], [0.5, 1]], [[0.08, 1], [0.92, 1]]] },
+  J: { width: 0.64, strokes: [[[0.08, 0], [0.94, 0], [0.94, 0.68], [0.84, 0.88], [0.64, 1], [0.36, 0.98], [0.14, 0.84], [0.06, 0.67]]] },
+  K: { width: 0.78, strokes: [[[0.04, 0], [0.04, 1]], [[0.96, 0], [0.04, 0.56], [0.98, 1]]] },
+  L: { width: 0.68, strokes: [[[0.04, 0], [0.04, 1], [0.96, 1]]] },
+  M: { width: 0.98, strokes: [[[0.04, 1], [0.04, 0], [0.5, 0.56], [0.96, 0], [0.96, 1]]] },
+  N: { width: 0.88, strokes: [[[0.04, 1], [0.04, 0], [0.96, 1], [0.96, 0]]] },
+  O: { width: 0.84, strokes: [[[0.5, 0], [0.22, 0.05], [0.05, 0.28], [0.05, 0.72], [0.22, 0.95], [0.5, 1], [0.78, 0.95], [0.95, 0.72], [0.95, 0.28], [0.78, 0.05], [0.5, 0]]] },
+  P: { width: 0.74, strokes: [[[0.04, 1], [0.04, 0], [0.5, 0], [0.84, 0.09], [0.94, 0.27], [0.84, 0.45], [0.5, 0.52], [0.04, 0.52]]] },
+  Q: { width: 0.86, strokes: [[[0.5, 0], [0.22, 0.05], [0.05, 0.28], [0.05, 0.72], [0.22, 0.95], [0.5, 1], [0.78, 0.95], [0.95, 0.72], [0.95, 0.28], [0.78, 0.05], [0.5, 0]], [[0.6, 0.66], [1, 1]]] },
+  R: { width: 0.78, strokes: [[[0.04, 1], [0.04, 0], [0.5, 0], [0.84, 0.09], [0.94, 0.27], [0.84, 0.44], [0.5, 0.5], [0.04, 0.5], [0.5, 0.5], [0.98, 1]]] },
+  S: { width: 0.76, strokes: [[[0.94, 0.15], [0.76, 0.03], [0.4, 0], [0.12, 0.14], [0.12, 0.37], [0.34, 0.49], [0.72, 0.55], [0.94, 0.68], [0.92, 0.88], [0.66, 1], [0.3, 0.98], [0.06, 0.84]]] },
+  T: { width: 0.74, strokes: [[[0.03, 0], [0.97, 0]], [[0.5, 0], [0.5, 1]]] },
+  U: { width: 0.82, strokes: [[[0.04, 0], [0.04, 0.68], [0.14, 0.88], [0.36, 1], [0.64, 1], [0.86, 0.88], [0.96, 0.68], [0.96, 0]]] },
+  V: { width: 0.8, strokes: [[[0.03, 0], [0.5, 1], [0.97, 0]]] },
+  W: { width: 1.02, strokes: [[[0.02, 0], [0.22, 1], [0.5, 0.55], [0.78, 1], [0.98, 0]]] },
+  X: { width: 0.8, strokes: [[[0.04, 0], [0.96, 1]], [[0.96, 0], [0.04, 1]]] },
+  Y: { width: 0.8, strokes: [[[0.04, 0], [0.5, 0.5], [0.96, 0]], [[0.5, 0.5], [0.5, 1]]] },
+  Z: { width: 0.78, strokes: [[[0.04, 0], [0.96, 0], [0.04, 1], [0.96, 1]]] },
 };
 
 const clamp = (value: number, min: number, max: number) =>
@@ -85,37 +85,35 @@ const normalize = (vector: Point): Point => {
 const tangentBetween = (a: Point, b: Point) =>
   normalize({ x: b.x - a.x, y: b.y - a.y });
 
-function smoothScriptStroke(points: Point[], samples = 7) {
+function roundPrintStroke(points: Point[]) {
   if (points.length < 3) return points;
   const result: Point[] = [points[0]];
 
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const previous = points[Math.max(0, index - 1)];
-    const current = points[index];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const corner = points[index];
     const next = points[index + 1];
-    const after = points[Math.min(points.length - 1, index + 2)];
+    const entry = lerpPoint(previous, corner, 0.84);
+    const exit = lerpPoint(corner, next, 0.16);
+    result.push(entry);
 
-    for (let step = 1; step <= samples; step += 1) {
-      const amount = step / samples;
-      const squared = amount * amount;
-      const cubed = squared * amount;
+    for (let step = 1; step <= 5; step += 1) {
+      const amount = step / 5;
+      const inverse = 1 - amount;
       result.push({
         x:
-          0.5 *
-          (2 * current.x +
-            (-previous.x + next.x) * amount +
-            (2 * previous.x - 5 * current.x + 4 * next.x - after.x) * squared +
-            (-previous.x + 3 * current.x - 3 * next.x + after.x) * cubed),
+          inverse * inverse * entry.x +
+          2 * inverse * amount * corner.x +
+          amount * amount * exit.x,
         y:
-          0.5 *
-          (2 * current.y +
-            (-previous.y + next.y) * amount +
-            (2 * previous.y - 5 * current.y + 4 * next.y - after.y) * squared +
-            (-previous.y + 3 * current.y - 3 * next.y + after.y) * cubed),
+          inverse * inverse * entry.y +
+          2 * inverse * amount * corner.y +
+          amount * amount * exit.y,
       });
     }
   }
 
+  result.push(points.at(-1) ?? points[0]);
   return result;
 }
 
@@ -126,7 +124,7 @@ function cubicConnector(
   endTangent: Point,
 ) {
   const gap = distance(start, end);
-  const reach = clamp(gap * 0.38, 24, 130);
+  const reach = clamp(gap * 0.34, 7, 130);
   const controlA = {
     x: start.x + startTangent.x * reach,
     y: start.y + startTangent.y * reach,
@@ -201,15 +199,17 @@ function wrapMessage(message: string, maxCharacters: number) {
 }
 
 function lineUnits(line: string) {
-  return Array.from(line).reduce(
-    (total, character, index) =>
-      total +
-      (character === " "
-        ? SCRIPT_WORD_GAP
-        : (SCRIPT_FONT[character] ?? SCRIPT_FONT.X).width +
-          SCRIPT_LETTER_GAP) +
-      (index ? 0 : 0.1),
-    0,
+  return (
+    0.08 +
+    Array.from(line).reduce(
+      (total, character) =>
+        total +
+        (character === " "
+          ? PRINT_WORD_GAP
+          : (PRINT_FONT[character] ?? PRINT_FONT.X).width +
+            PRINT_LETTER_GAP),
+      0,
+    )
   );
 }
 
@@ -221,73 +221,46 @@ function buildMessageRoute(
   startTangent: Point,
 ) {
   const isPhone = viewportWidth < 620;
-  const lines = wrapMessage(message, isPhone ? 11 : 18);
+  const lines = wrapMessage(message, isPhone ? 10 : 18);
   const widestLine = Math.max(...lines.map(lineUnits));
-  const verticalStretch = isPhone ? 1.38 : 1.18;
+  const verticalStretch = isPhone ? 1.16 : 1.08;
   const scale = Math.min(
     (viewportWidth * (isPhone ? 0.9 : 0.78)) / widestLine,
-    isPhone ? 59 : 76,
-    (viewportHeight * 0.39) /
-      (verticalStretch * (1.12 + (lines.length - 1) * 1.5)),
+    isPhone ? 60 : 78,
+    (viewportHeight * 0.42) /
+      (verticalStretch * (1.08 + (lines.length - 1) * 1.46)),
   );
   const letterHeight = scale * verticalStretch;
-  const lineGap = letterHeight * 1.5;
-  const blockHeight = letterHeight * 1.12 + (lines.length - 1) * lineGap;
+  const lineGap = letterHeight * 1.46;
+  const blockHeight = letterHeight * 1.08 + (lines.length - 1) * lineGap;
   const startY = clamp(
-    viewportHeight * 0.23 - blockHeight * 0.12,
-    viewportHeight * 0.145,
-    viewportHeight * 0.28,
+    viewportHeight * 0.22 - blockHeight * 0.1,
+    viewportHeight * 0.14,
+    viewportHeight * 0.27,
   );
-  const strokes: Array<{ points: Point[]; line: number; word: number }> = [];
+  const strokes: Array<{ points: Point[]; line: number }> = [];
 
   lines.forEach((line, lineIndex) => {
     const width = lineUnits(line) * scale;
     let cursor = (viewportWidth - width) / 2;
-    const baseline = startY + lineIndex * lineGap + letterHeight * 0.82;
-    const words = line.split(" ");
+    Array.from(line).forEach((character) => {
+      if (character === " ") {
+        cursor += scale * PRINT_WORD_GAP;
+        return;
+      }
 
-    words.forEach((word, wordIndex) => {
-      const wordPoints: Point[] = [
-        { x: cursor - scale * 0.12, y: baseline + scale * 0.045 },
-        { x: cursor, y: baseline },
-      ];
-
-      Array.from(word).forEach((character) => {
-        const glyph = SCRIPT_FONT[character] ?? SCRIPT_FONT.X;
-        const transformed = glyph.points.map(([x, y]) => ({
-          x:
-            cursor +
-            x * glyph.width * scale +
-            (0.82 - y) * scale * 0.1,
+      const glyph = PRINT_FONT[character] ?? PRINT_FONT.X;
+      glyph.strokes.forEach((stroke) => {
+        const transformed = stroke.map(([x, y]) => ({
+          x: cursor + x * glyph.width * scale,
           y: startY + lineIndex * lineGap + y * letterHeight,
         }));
-        const smoothed = smoothScriptStroke(transformed);
-        const previous = wordPoints.at(-1) ?? transformed[0];
-        const previousTangent = tangentBetween(
-          wordPoints.at(-2) ?? previous,
-          previous,
-        );
-        const nextTangent = tangentBetween(
-          smoothed[0],
-          smoothed[1] ?? smoothed[0],
-        );
-        wordPoints.push(
-          ...cubicConnector(previous, previousTangent, smoothed[0], nextTangent).slice(1),
-          ...smoothed.slice(1),
-        );
-        cursor += (glyph.width + SCRIPT_LETTER_GAP) * scale;
+        strokes.push({
+          points: roundPrintStroke(transformed),
+          line: lineIndex,
+        });
       });
-
-      wordPoints.push({
-        x: cursor + scale * 0.18,
-        y: baseline - scale * 0.025,
-      });
-      strokes.push({
-        points: wordPoints,
-        line: lineIndex,
-        word: wordIndex,
-      });
-      if (wordIndex < words.length - 1) cursor += scale * SCRIPT_WORD_GAP;
+      cursor += (glyph.width + PRINT_LETTER_GAP) * scale;
     });
   });
 
@@ -556,6 +529,27 @@ export default function Home() {
       spriteContext.fillRect(0, 0, 64, 64);
     }
 
+    const messageSprite = document.createElement("canvas");
+    messageSprite.width = 64;
+    messageSprite.height = 64;
+    const messageSpriteContext = messageSprite.getContext("2d");
+    if (messageSpriteContext) {
+      const messageGradient = messageSpriteContext.createRadialGradient(
+        32,
+        32,
+        1,
+        32,
+        32,
+        31,
+      );
+      messageGradient.addColorStop(0, "rgba(255,255,255,1)");
+      messageGradient.addColorStop(0.42, "rgba(252,253,255,0.88)");
+      messageGradient.addColorStop(0.72, "rgba(232,240,252,0.3)");
+      messageGradient.addColorStop(1, "rgba(220,231,250,0)");
+      messageSpriteContext.fillStyle = messageGradient;
+      messageSpriteContext.fillRect(0, 0, 64, 64);
+    }
+
     const glowSprite = document.createElement("canvas");
     glowSprite.width = 96;
     glowSprite.height = 96;
@@ -671,8 +665,8 @@ export default function Home() {
                 ? 0.26
                 : 0.64
               : wisp
-                ? 0.12
-                : 0.78,
+                ? 0.15
+                : 0.92,
           kind,
         };
       };
@@ -750,7 +744,13 @@ export default function Home() {
               ? 0.000055
               : 0.00017);
         const age = 1 - particle.life / particle.maxLife;
-        const fadeIn = clamp(age / (particle.kind === "stunt" ? 0.035 : 0.009), 0, 1);
+        const fadeInWindow =
+          particle.kind === "stunt"
+            ? 0.035
+            : particle.kind === "message"
+              ? 0.0045
+              : 0.009;
+        const fadeIn = clamp(age / fadeInWindow, 0, 1);
         const naturalFade =
           particle.kind === "stunt"
             ? clamp(particle.life / (particle.maxLife * 0.5), 0, 1)
@@ -759,7 +759,7 @@ export default function Home() {
           particle.alpha * fadeIn * naturalFade * layerOpacity;
         const diameter =
           particle.radius *
-          (particle.kind === "message" ? 3.35 : 3.9) *
+          (particle.kind === "message" ? 3.55 : 3.9) *
           (1 + fadeProgress * 0.48);
         if (particle.kind === "finale" && finaleGlow > 0.01) {
           const glowDiameter = diameter * (2.1 + finaleGlow * 1.2);
@@ -774,7 +774,7 @@ export default function Home() {
         }
         context.globalAlpha = particleOpacity;
         context.drawImage(
-          sprite,
+          particle.kind === "message" ? messageSprite : sprite,
           particle.x - diameter / 2,
           particle.y - diameter / 2,
           diameter,
